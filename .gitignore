@@ -39,6 +39,7 @@ wheels/
 # Logs and databases
 *.log
 *.sqlite3
+*.db
 
 # OS files
 Thumbs.db
