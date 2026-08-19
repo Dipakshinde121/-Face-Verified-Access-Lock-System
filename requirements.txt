@@ -1,0 +1,4 @@
+numpy<2.0.0
+opencv-python
+face_recognition
+setuptools<=80.10.2
