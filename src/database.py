@@ -18,6 +18,7 @@ def get_db_connection(db_path=DB_PATH):
 def init_db(db_path=DB_PATH):
     """
     Initializes the SQLite database schema if tables do not exist.
+    Applies schema migrations for older versions.
     """
     conn = get_db_connection(db_path)
     try:
@@ -43,6 +44,13 @@ def init_db(db_path=DB_PATH):
             FOREIGN KEY (roll_number) REFERENCES students (roll_number)
         );
         """)
+        
+        # Migration: Add severity column if it doesn't exist (for older DBs)
+        try:
+            cursor.execute("ALTER TABLE logs ADD COLUMN severity TEXT DEFAULT 'INFO';")
+        except sqlite3.OperationalError:
+            # Column already exists, safe to ignore
+            pass
         
         conn.commit()
     finally:
@@ -150,13 +158,14 @@ def get_student_by_roll(roll_number, db_path=DB_PATH):
     finally:
         conn.close()
 
-def log_event(roll_number, event, db_path=DB_PATH):
+def log_event(roll_number, event, severity="INFO", db_path=DB_PATH):
     """
     Logs an access control or authentication event for a student.
     
     Parameters:
         roll_number (str): The student's roll number.
         event (str): The details of the event (e.g. 'ACCESS_GRANTED', 'ACCESS_DENIED').
+        severity (str): Threat severity level ('INFO', 'LOW', 'MEDIUM', 'HIGH'). Default 'INFO'.
         db_path (str): Path to the database file.
         
     Returns:
@@ -167,8 +176,8 @@ def log_event(roll_number, event, db_path=DB_PATH):
     try:
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO logs (roll_number, event, timestamp) VALUES (?, ?, ?)",
-            (roll_number, event, timestamp)
+            "INSERT INTO logs (roll_number, event, timestamp, severity) VALUES (?, ?, ?, ?)",
+            (roll_number, event, timestamp, severity)
         )
         conn.commit()
         return True

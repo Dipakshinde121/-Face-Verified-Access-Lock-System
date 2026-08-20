@@ -3,6 +3,8 @@ import time
 import cv2
 import face_recognition
 import _thread
+import os
+import platform
 from src.database import log_event
 
 class ContinuousVerificationThread(threading.Thread):
@@ -20,30 +22,24 @@ class ContinuousVerificationThread(threading.Thread):
 
     def run(self):
         # Initial sleep so we don't check instantly after login
-        # We loop sleeping in 1s intervals so we can exit quickly if stop() is called
-        for _ in range(self.check_interval):
-            if not self.running: return
-            time.sleep(1)
+        self._sleep_interval()
         
         while self.running:
             # 1. Capture a fresh frame
-            # Opening and releasing the camera in the loop prevents the camera 
-            # buffer from serving stale frames from 30 seconds ago.
             cap = cv2.VideoCapture(0)
             if not cap.isOpened():
-                log_event(self.session_state.roll_number, "PERIODIC_CHECK_ERROR_CAMERA")
+                log_event(self.session_state.roll_number, "PERIODIC_CHECK_ERROR_CAMERA", severity="MEDIUM")
                 self._sleep_interval()
                 continue
                 
             # Read a few frames to let the camera sensor adjust to lighting
-            # NOTE: Poor lighting is a major cause of False Rejection Rates (FRR)
             for _ in range(5):
                 cap.read()
             ret, frame = cap.read()
             cap.release()
 
             if not ret or frame is None:
-                log_event(self.session_state.roll_number, "PERIODIC_CHECK_ERROR_FRAME")
+                log_event(self.session_state.roll_number, "PERIODIC_CHECK_ERROR_FRAME", severity="MEDIUM")
                 self._sleep_interval()
                 continue
 
@@ -54,11 +50,11 @@ class ContinuousVerificationThread(threading.Thread):
             # --- THREAT MODEL A: No face detected (User stepped away) ---
             if len(face_locations) == 0:
                 self.missed_checks += 1
-                log_event(self.session_state.roll_number, f"PERIODIC_CHECK_NO_FACE (Missed: {self.missed_checks})")
+                log_event(self.session_state.roll_number, f"PERIODIC_CHECK_NO_FACE (Missed: {self.missed_checks})", severity="INFO")
                 
                 if self.missed_checks >= self.max_missed_checks:
                     print(f"\n\n[SECURITY] Grace period expired. No face detected for {self.check_interval * self.max_missed_checks}s. Locking session.")
-                    log_event(self.session_state.roll_number, "SESSION_LOCKED_TIMEOUT")
+                    log_event(self.session_state.roll_number, "LOCK_NO_FACE_TIMEOUT", severity="LOW")
                     self.trigger_lock()
             else:
                 # 3. Face(s) detected, extract encodings
@@ -66,7 +62,6 @@ class ContinuousVerificationThread(threading.Thread):
                 match_found = False
                 
                 for face_encoding in encodings:
-                    # Compare using 0.6 tolerance (industry standard baseline for this library)
                     matches = face_recognition.compare_faces([self.session_state.face_encoding], face_encoding, tolerance=0.6)
                     if matches[0]:
                         match_found = True
@@ -75,12 +70,12 @@ class ContinuousVerificationThread(threading.Thread):
                 # --- THREAT MODEL C: Face Matches (Authorized User) ---
                 if match_found:
                     self.missed_checks = 0 # Reset grace period
-                    log_event(self.session_state.roll_number, "PERIODIC_CHECK_SUCCESS")
+                    log_event(self.session_state.roll_number, "PERIODIC_CHECK_SUCCESS", severity="INFO")
                     
                 # --- THREAT MODEL B: Different Face (Impersonation Attempt) ---
                 else:
                     print("\n\n[SECURITY ALERT] Unrecognized face detected at terminal! Locking immediately.")
-                    log_event(self.session_state.roll_number, "SESSION_LOCKED_IMPERSONATION")
+                    log_event(self.session_state.roll_number, "LOCK_FACE_MISMATCH", severity="HIGH")
                     self.trigger_lock()
 
             # Wait for next interval if still running
@@ -93,8 +88,29 @@ class ContinuousVerificationThread(threading.Thread):
                 break
             time.sleep(1)
 
+    def _lock_os_workstation(self):
+        """Executes the OS-level workstation lock."""
+        sys_os = platform.system()
+        try:
+            if sys_os == "Windows":
+                import ctypes
+                ctypes.windll.user32.LockWorkStation()
+            elif sys_os == "Linux":
+                # Try common Linux screen locker commands
+                # dbus-send is often the most universal for modern desktop environments
+                exit_code = os.system("dbus-send --type=method_call --dest=org.gnome.ScreenSaver /org/gnome/ScreenSaver org.gnome.ScreenSaver.Lock > /dev/null 2>&1")
+                if exit_code != 0:
+                    exit_code = os.system("loginctl lock-session > /dev/null 2>&1")
+                if exit_code != 0:
+                    os.system("xdg-screensaver lock > /dev/null 2>&1")
+            elif sys_os == "Darwin": # macOS
+                os.system("pmset displaysleepnow")
+        except Exception as e:
+            print(f"\n[Warning] Failed to execute OS lock command: {e}")
+
     def trigger_lock(self):
-        """Forces the main application to exit, securing the terminal."""
+        """Forces the OS to lock and the main application to exit, securing the terminal."""
         self.running = False
-        # Interrupts the main thread (which is likely blocked on input()) by raising a KeyboardInterrupt
+        self._lock_os_workstation()
+        # Interrupts the main thread cleanly
         _thread.interrupt_main()
