@@ -5,26 +5,75 @@ import face_recognition
 import _thread
 import os
 import platform
+import json
 from src.database import log_event
 
+def load_config():
+    try:
+        with open("config.json", "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {
+            "verification_interval": 30,
+            "grace_period_missed_checks": 2,
+            "face_match_tolerance": 0.6,
+            "max_pause_duration_seconds": 60
+        }
+
 class ContinuousVerificationThread(threading.Thread):
-    def __init__(self, session_state, check_interval=30):
+    def __init__(self, session_state):
         super().__init__()
         self.session_state = session_state
-        self.check_interval = check_interval
-        self.daemon = True  # Allows thread to exit automatically when main program exits
+        
+        # Load configurable policies
+        self.config = load_config()
+        self.check_interval = self.config.get("verification_interval", 30)
+        self.max_missed_checks = self.config.get("grace_period_missed_checks", 2)
+        self.tolerance = self.config.get("face_match_tolerance", 0.6)
+        self.max_pause_duration = self.config.get("max_pause_duration_seconds", 60)
+        
+        self.daemon = True
         self.running = True
         self.missed_checks = 0
-        self.max_missed_checks = 2
+        
+        # Anti-Tamper & Pause State
+        self.is_paused = False
+        self.pause_start_time = 0
 
     def stop(self):
         self.running = False
+
+    def pause_monitoring(self):
+        """Auditable policy override to temporarily pause webcam checks."""
+        if not self.is_paused:
+            self.is_paused = True
+            self.pause_start_time = time.time()
+            log_event(self.session_state.roll_number, "POLICY_OVERRIDE", severity="MEDIUM")
+
+    def resume_monitoring(self):
+        """Manually resumes monitoring."""
+        if self.is_paused:
+            self.is_paused = False
+            self.pause_start_time = 0
+            self.missed_checks = 0 # Reset grace period when resuming
+            log_event(self.session_state.roll_number, "POLICY_RESUMED", severity="INFO")
 
     def run(self):
         # Initial sleep so we don't check instantly after login
         self._sleep_interval()
         
         while self.running:
+            # --- FAIL-SAFE / ANTI-TAMPER CHECK ---
+            if self.is_paused:
+                if time.time() - self.pause_start_time > self.max_pause_duration:
+                    self.is_paused = False
+                    self.pause_start_time = 0
+                    self.missed_checks = 0
+                    log_event(self.session_state.roll_number, "AUTO_RESUME_FAILSAFE", severity="HIGH")
+                else:
+                    time.sleep(1)
+                    continue
+
             # 1. Capture a fresh frame
             cap = cv2.VideoCapture(0)
             if not cap.isOpened():
@@ -62,7 +111,7 @@ class ContinuousVerificationThread(threading.Thread):
                 match_found = False
                 
                 for face_encoding in encodings:
-                    matches = face_recognition.compare_faces([self.session_state.face_encoding], face_encoding, tolerance=0.6)
+                    matches = face_recognition.compare_faces([self.session_state.face_encoding], face_encoding, tolerance=self.tolerance)
                     if matches[0]:
                         match_found = True
                         break
@@ -96,14 +145,12 @@ class ContinuousVerificationThread(threading.Thread):
                 import ctypes
                 ctypes.windll.user32.LockWorkStation()
             elif sys_os == "Linux":
-                # Try common Linux screen locker commands
-                # dbus-send is often the most universal for modern desktop environments
                 exit_code = os.system("dbus-send --type=method_call --dest=org.gnome.ScreenSaver /org/gnome/ScreenSaver org.gnome.ScreenSaver.Lock > /dev/null 2>&1")
                 if exit_code != 0:
                     exit_code = os.system("loginctl lock-session > /dev/null 2>&1")
                 if exit_code != 0:
                     os.system("xdg-screensaver lock > /dev/null 2>&1")
-            elif sys_os == "Darwin": # macOS
+            elif sys_os == "Darwin":
                 os.system("pmset displaysleepnow")
         except Exception as e:
             print(f"\n[Warning] Failed to execute OS lock command: {e}")

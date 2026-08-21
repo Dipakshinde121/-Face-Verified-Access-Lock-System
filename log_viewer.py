@@ -14,7 +14,10 @@ EVENT_DESCRIPTIONS = {
     "LOCK_NO_FACE_TIMEOUT": "User absent - Grace period expired (Auto-Locked)",
     "LOCK_FACE_MISMATCH": "Unrecognized face detected (Impersonation attempt - Auto-Locked)",
     "PERIODIC_CHECK_ERROR_CAMERA": "Failed to access webcam during check",
-    "PERIODIC_CHECK_ERROR_FRAME": "Failed to read frame from webcam"
+    "PERIODIC_CHECK_ERROR_FRAME": "Failed to read frame from webcam",
+    "POLICY_OVERRIDE": "User explicitly paused security monitoring",
+    "POLICY_RESUMED": "User manually resumed security monitoring",
+    "AUTO_RESUME_FAILSAFE": "Max pause duration exceeded - Auto-resumed monitoring"
 }
 
 def print_table(headers, rows):

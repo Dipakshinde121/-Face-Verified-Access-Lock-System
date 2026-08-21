@@ -64,24 +64,24 @@ def main():
             
             # Start continuous verification
             from verify import ContinuousVerificationThread
-            verification_thread = ContinuousVerificationThread(active_session, check_interval=30)
+            verification_thread = ContinuousVerificationThread(active_session)
             verification_thread.start()
             
-            # 6: Keep the script running to simulate an active session
-            print("\nEnter 'q' or press Ctrl+C to end the session and logout.")
+            # 6: Start system tray app
+            from tray_app import SystemTrayApp
+            print("\nMonitoring started in Background.")
+            print("Check your System Tray (Taskbar) for controls.")
+            tray_app = SystemTrayApp(active_session, verification_thread)
+            
             try:
-                while True:
-                    cmd = input(f"[{name}'s Session] > ").strip().lower()
-                    if cmd == 'q':
-                        print(f"Ending session for {name}...")
-                        verification_thread.stop()
-                        log_event(roll_input, "LOGOUT")
-                        print("Logged out successfully.")
-                        break # Break inner loop, go back to main login prompt
+                # The pystray icon.run() blocks the main thread
+                tray_app.run()
             except KeyboardInterrupt:
                 # Handle Ctrl+C or security lock (raised by verification thread) cleanly
                 print(f"\nEnding session for {name}...")
                 verification_thread.stop()
+                if tray_app.icon:
+                    tray_app.icon.stop()
                 log_event(roll_input, "LOGOUT_OR_LOCK")
                 print("Session terminated.")
                 break # Go back to main login prompt

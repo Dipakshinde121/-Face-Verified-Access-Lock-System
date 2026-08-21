@@ -1,14 +1,35 @@
-# Brain
+# Project Brain: Face-Verified Access Lock System
 
-This file can serve as a knowledge base, scratchpad, or planning document for the project.
+This document serves as the central knowledge base, architectural overview, and roadmap for the project.
 
-## Current Architecture
-- `database.py`: Handles SQLite database initialization, storage of biometric encodings, and event logging.
-- `register.py`: GUI for capturing and registering new student faces.
-- `login.py`: Handles user login and initializes active session state.
-- `verify.py`: Background thread for continuous biometric authentication and threat mitigation.
-- `view_db.py`: CLI tool for inspecting registered users and audit logs.
-- `webcam_test.py`: Lightweight script to verify camera and OpenCV cascades.
+## Current Architecture & Modules
 
-## Next Steps / To Do
-- [ ] 
+### 1. Core Data & Security Configuration
+- `config.json`: Externalized security policies (verification interval, grace period, biometric tolerance, max pause duration). Allows tuning without touching code.
+- `database.py`: Handles SQLite DB initialization, schema migrations (e.g., adding `severity` tags), storage of biometric encodings, and robust event logging for the audit trail.
+
+### 2. User Interfaces & Onboarding
+- `register.py`: GUI (OpenCV) for capturing and registering new student faces. Ensures single-face validation before computing encodings.
+- `login.py`: Initiates the user session. Validates roll numbers against the DB, loads biometrics, starts the continuous verification thread, and launches the system tray application.
+- `tray_app.py`: Uses `pystray` to hide the application in the background (System Tray) after login, providing context menu options for Pause, Resume, and Logout.
+
+### 3. Enforcement & Verification (Continuous Authentication)
+- `verify.py`: The background engine. Periodically captures webcam frames to verify identity. 
+  - **Threat A (No Face):** Logs a missed check. If grace period expires, triggers an auto-lock (`LOCK_NO_FACE_TIMEOUT`).
+  - **Threat B (Wrong Face):** Instantly triggers an auto-lock (`LOCK_FACE_MISMATCH`).
+  - **Anti-Tamper:** Monitors the "Pause" state. If paused beyond the max duration, it auto-resumes monitoring.
+  - **Enforcement:** Uses OS-level commands (e.g., `ctypes.windll.user32.LockWorkStation()` on Windows) to physically secure the workstation.
+
+### 4. Auditing & Forensics
+- `log_viewer.py`: The Security Monitoring Dashboard. Parses raw SQLite logs into a readable ASCII table with plain-English descriptions and filters by Threat Severity (LOW/HIGH).
+- `view_db.py`: CLI tool for inspecting registered users and raw data.
+- `webcam_test.py`: Hardware diagnostic script to test Haar Cascades and camera feeds.
+
+---
+
+## Roadmap / Next Tasks
+
+- [ ] **Task 1: Liveness Detection (Anti-Spoofing)** - Implement blink detection or depth analysis to prevent attackers from bypassing the system using photographs or videos on phones.
+- [ ] **Task 2: Data-at-Rest Encryption** - Use `cryptography.fernet` to encrypt the 128-d face encodings in the SQLite database, protecting sensitive PII in case the `.db` file is stolen.
+- [ ] **Task 3: Multi-Factor Authentication (MFA)** - Add a PIN or Google Authenticator TOTP requirement to the `login.py` script.
+- [ ] **Task 4: Real-Time Incident Alerting** - Add webhook integration (e.g., Discord/Slack) to send a push notification when a `HIGH` severity impersonation attempt occurs.
