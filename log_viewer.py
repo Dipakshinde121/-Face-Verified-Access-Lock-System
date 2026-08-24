@@ -17,7 +17,8 @@ EVENT_DESCRIPTIONS = {
     "PERIODIC_CHECK_ERROR_FRAME": "Failed to read frame from webcam",
     "POLICY_OVERRIDE": "User explicitly paused security monitoring",
     "POLICY_RESUMED": "User manually resumed security monitoring",
-    "AUTO_RESUME_FAILSAFE": "Max pause duration exceeded - Auto-resumed monitoring"
+    "AUTO_RESUME_FAILSAFE": "Max pause duration exceeded - Auto-resumed monitoring",
+    "LOGIN_DENIED_LIVENESS_FAIL": "Login denied - Failed liveness check (Spoofing attempt)"
 }
 
 def print_table(headers, rows):

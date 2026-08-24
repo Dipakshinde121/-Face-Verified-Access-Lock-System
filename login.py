@@ -54,6 +54,20 @@ def main():
 
             name = student_info['name']
             
+            # --- LIVENESS CHALLENGE (ANTI-SPOOFING) ---
+            print(f"\n[SECURITY] Initiating Liveness Detection for {name}...")
+            from liveness_check import run_liveness_challenge
+            liveness_passed = run_liveness_challenge()
+            
+            if not liveness_passed:
+                print("\n[SECURITY ALERT] Liveness check failed! Possible presentation attack.")
+                log_event(roll_input, "LOGIN_DENIED_LIVENESS_FAIL", severity="HIGH")
+                
+                # Dispatch real-time alert for this high-severity spoofing attempt
+                import alerting
+                alerting.trigger_high_severity_alert(roll_input, "Failed Liveness Check (Possible Presentation/Spoofing Attack)")
+                continue
+            
             # 4 & 5: Setup Session and Log Event
             active_session = SessionState(roll_input, name, face_encoding)
             log_event(roll_input, "LOGIN")
