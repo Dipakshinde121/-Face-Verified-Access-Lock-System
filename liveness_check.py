@@ -64,11 +64,12 @@ def run_liveness_challenge(predictor_filename="shape_predictor_68_face_landmarks
             if not ret:
                 break
                 
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            rects = detector(gray, 0)
+            # Convert to RGB for dlib processing to avoid "Unsupported image type" errors
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            rects = detector(rgb_frame, 0)
             
             for rect in rects:
-                shape = predictor(gray, rect)
+                shape = predictor(rgb_frame, rect)
                 shape = [(shape.part(i).x, shape.part(i).y) for i in range(68)]
                 
                 leftEye = shape[lStart:lEnd]
