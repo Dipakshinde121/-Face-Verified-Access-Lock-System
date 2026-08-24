@@ -36,6 +36,12 @@ def init_db(db_path=DB_PATH):
         );
         """)
         
+        # Migration: Add totp_secret column if it doesn't exist (for MFA)
+        try:
+            cursor.execute("ALTER TABLE students ADD COLUMN totp_secret BLOB;")
+        except sqlite3.OperationalError:
+            pass
+        
         # Create logs table
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS logs (
@@ -58,7 +64,7 @@ def init_db(db_path=DB_PATH):
     finally:
         conn.close()
 
-def add_student(roll_number, name, face_encoding, db_path=DB_PATH):
+def add_student(roll_number, name, face_encoding, totp_secret, db_path=DB_PATH):
     """
     Registers or updates a student in the database.
     
@@ -66,6 +72,7 @@ def add_student(roll_number, name, face_encoding, db_path=DB_PATH):
         roll_number (str): The student's unique roll number.
         name (str): The student's name.
         face_encoding (numpy.ndarray): The 128-dimensional face encoding vector.
+        totp_secret (str): The base32 TOTP secret string.
         db_path (str): Path to the database file.
         
     Returns:
@@ -74,9 +81,10 @@ def add_student(roll_number, name, face_encoding, db_path=DB_PATH):
     # Serialize numpy array to bytes
     serialized_encoding = pickle.dumps(face_encoding)
     
-    # ENCRYPT-THEN-STORE: Encrypt the biometric PII before it hits the disk
+    # ENCRYPT-THEN-STORE: Encrypt the biometric PII and TOTP Secret before hitting disk
     import crypto_utils
     encrypted_encoding = crypto_utils.encrypt_data(serialized_encoding)
+    encrypted_totp = crypto_utils.encrypt_data(totp_secret.encode('utf-8'))
     
     registered_date = datetime.now().isoformat()
     
@@ -85,10 +93,10 @@ def add_student(roll_number, name, face_encoding, db_path=DB_PATH):
         cursor = conn.cursor()
         cursor.execute(
             """
-            INSERT OR REPLACE INTO students (roll_number, name, face_encoding, registered_date)
-            VALUES (?, ?, ?, ?)
+            INSERT OR REPLACE INTO students (roll_number, name, face_encoding, totp_secret, registered_date)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (roll_number, name, encrypted_encoding, registered_date)
+            (roll_number, name, encrypted_encoding, encrypted_totp, registered_date)
         )
         conn.commit()
         return True
@@ -131,6 +139,28 @@ def get_face_by_roll(roll_number, db_path=DB_PATH):
         return None
     except sqlite3.Error as e:
         print(f"[DB Error] Failed to fetch encoding for roll {roll_number}: {e}")
+        return None
+    finally:
+        conn.close()
+
+def get_totp_secret_by_roll(roll_number, db_path=DB_PATH):
+    """
+    Fetches a student's TOTP secret by their roll number.
+    Returns the plaintext string secret, or None if missing.
+    """
+    conn = get_db_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT totp_secret FROM students WHERE roll_number = ?", (roll_number,))
+        row = cursor.fetchone()
+        if row and row[0]:
+            encrypted_totp = row[0]
+            import crypto_utils
+            decrypted_totp = crypto_utils.decrypt_data(encrypted_totp).decode('utf-8')
+            return decrypted_totp
+        return None
+    except sqlite3.Error as e:
+        print(f"[DB Error] Failed to fetch TOTP secret for roll {roll_number}: {e}")
         return None
     finally:
         conn.close()

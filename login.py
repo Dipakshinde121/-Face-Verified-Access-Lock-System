@@ -54,6 +54,30 @@ def main():
 
             name = student_info['name']
             
+            # --- MFA CHALLENGE (TOTP) ---
+            print("\n[SECURITY] Initiating Multi-Factor Authentication...")
+            import pyotp
+            from src.database import get_totp_secret_by_roll
+            
+            totp_secret = get_totp_secret_by_roll(roll_input)
+            if not totp_secret:
+                print(f"[Error] No TOTP secret found for '{roll_input}'. MFA is required.")
+                print("Please re-register your profile to set up Google Authenticator.")
+                continue
+                
+            totp = pyotp.TOTP(totp_secret)
+            user_code = input(f"Enter 6-digit MFA Code for {name}: ").strip()
+            
+            # valid_window=1 allows for 1 interval (30s) of clock drift for usability vs replay attack tradeoff
+            if not totp.verify(user_code, valid_window=1):
+                print("\n[SECURITY ALERT] Invalid MFA Code! Access Denied.")
+                log_event(roll_input, "LOGIN_DENIED_INVALID_TOTP", severity="HIGH")
+                import alerting
+                alerting.trigger_high_severity_alert(roll_input, "Failed MFA Code (Invalid TOTP)")
+                continue
+                
+            print("[Success] MFA Code Verified.")
+            
             # --- LIVENESS CHALLENGE (ANTI-SPOOFING) ---
             print(f"\n[SECURITY] Initiating Liveness Detection for {name}...")
             from liveness_check import run_liveness_challenge

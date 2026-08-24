@@ -145,7 +145,7 @@ def main():
                 # Convert captured frame to RGB for face_recognition library
                 rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 
-                # Detect face locations
+                print("\nProcessing biometric data...")
                 face_locations = face_recognition.face_locations(rgb_frame)
                 num_faces = len(face_locations)
                 
@@ -163,9 +163,7 @@ def main():
                     
                 else: # Exactly 1 face
                     print("Face detected! Generating 128-d face encoding...")
-                    # Generate encoding for the detected face
                     face_location = face_locations[0]
-                    # We pass the location to speed up the encoding process
                     encodings = face_recognition.face_encodings(rgb_frame, known_face_locations=[face_location])
                     
                     if not encodings:
@@ -177,8 +175,37 @@ def main():
                         
                     face_encoding = encodings[0]
                     
+                    # --- MFA PROVISIONING (TOTP) ---
+                    import pyotp
+                    import qrcode
+                    
+                    print("\n" + "="*50)
+                    print("SECURITY SETUP: MULTI-FACTOR AUTHENTICATION (MFA)")
+                    print("="*50)
+                    print("1. Open Google Authenticator or Authy on your phone.")
+                    print("2. Scan the QR code below to link your account.")
+                    
+                    # Generate a unique base32 secret for this student
+                    totp_secret = pyotp.random_base32()
+                    
+                    # Create the provisioning URI
+                    totp_uri = pyotp.totp.TOTP(totp_secret).provisioning_uri(
+                        name=roll_number,
+                        issuer_name="Lab Access Control"
+                    )
+                    
+                    # Print QR code to terminal
+                    qr = qrcode.QRCode(version=1, box_size=2, border=1)
+                    qr.add_data(totp_uri)
+                    qr.make(fit=True)
+                    qr.print_ascii()
+                    
+                    print(f"\nIf you cannot scan the QR code, manually enter this setup key: {totp_secret}")
+                    print("Make sure you save this in your authenticator app BEFORE proceeding!")
+                    input("\nPress Enter to complete registration...")
+                    
                     print(f"Saving to database for student '{name}' ({roll_number})...")
-                    success = add_student(roll_number, name, face_encoding)
+                    success = add_student(roll_number, name, face_encoding, totp_secret)
                     
                     if success:
                         log_event(roll_number, "REGISTRATION_SUCCESS")
@@ -189,7 +216,7 @@ def main():
                         cv2.rectangle(success_frame, (10, h_h - 90), (w_h - 10, h_h - 55), (0, 0, 0), -1)
                         cv2.putText(
                             success_frame, 
-                            "Registration Successful! Saving...", 
+                            "Registration Successful!", 
                             (20, h_h - 68), 
                             cv2.FONT_HERSHEY_SIMPLEX, 
                             0.6, 

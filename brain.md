@@ -31,5 +31,5 @@ This document serves as the central knowledge base, architectural overview, and 
 
 - [x] **Task 1: Liveness Detection (Anti-Spoofing)** - Implemented blink detection via Eye Aspect Ratio (EAR) using dlib's 68-point facial landmark predictor to prevent attackers from bypassing the system using photographs or videos.
 - [x] **Task 2: Data-at-Rest Encryption** - Used `cryptography.fernet` to encrypt the 128-d face encodings in the SQLite database, protecting sensitive biometric PII in case the `.db` file is stolen.
-- [ ] **Task 3: Multi-Factor Authentication (MFA)** - Add a PIN or Google Authenticator TOTP requirement to the `login.py` script.
+- [x] **Task 3: Multi-Factor Authentication (MFA)** - Integrated `pyotp` and Google Authenticator TOTP as a fail-fast secondary layer ("Something You Have") before biometric challenge.
 - [x] **Task 4: Real-Time Incident Alerting** - Added webhook integration (Discord) to send a push notification when a `HIGH` severity impersonation attempt occurs, completely decoupling the alerting from the core fail-safe lock.
