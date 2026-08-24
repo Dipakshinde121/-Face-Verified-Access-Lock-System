@@ -3,8 +3,11 @@ import json
 from datetime import datetime
 
 def load_webhook_url():
+    import os
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(base_dir, "config.json")
     try:
-        with open("config.json", "r") as f:
+        with open(config_path, "r") as f:
             config = json.load(f)
             return config.get("discord_webhook_url", "")
     except Exception:

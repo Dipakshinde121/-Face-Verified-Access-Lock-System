@@ -24,13 +24,15 @@ def eye_aspect_ratio(eye):
     ear = (A + B) / (2.0 * C)
     return ear
 
-def run_liveness_challenge(predictor_path="shape_predictor_68_face_landmarks.dat", challenge_duration=5.0):
+def run_liveness_challenge(predictor_filename="shape_predictor_68_face_landmarks.dat", challenge_duration=5.0):
     """
     Runs a live webcam feed for a set duration, forcing the user to blink 
     to prove they are a live human and not a static photograph (Anti-Spoofing).
     
     Returns True if a blink is detected, False otherwise.
     """
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    predictor_path = os.path.join(base_dir, predictor_filename)
     if not os.path.exists(predictor_path):
         print(f"\n[ERROR] Missing '{predictor_path}'!")
         print("Please download it from: http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2")

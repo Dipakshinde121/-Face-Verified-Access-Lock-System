@@ -2,9 +2,11 @@ import sqlite3
 import pickle
 # pyrefly: ignore [missing-import]
 import numpy as np
+import os
 from datetime import datetime
 
-DB_PATH = "access_control.db"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(BASE_DIR, "access_control.db")
 
 def get_db_connection(db_path=DB_PATH):
     """

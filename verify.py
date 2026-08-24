@@ -9,8 +9,11 @@ import json
 from src.database import log_event
 
 def load_config():
+    import os
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(base_dir, "config.json")
     try:
-        with open("config.json", "r") as f:
+        with open(config_path, "r") as f:
             return json.load(f)
     except FileNotFoundError:
         return {

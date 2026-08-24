@@ -1,7 +1,8 @@
 import os
 from cryptography.fernet import Fernet, InvalidToken
 
-KEY_FILE = "secret.key"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+KEY_FILE = os.path.join(BASE_DIR, "secret.key")
 
 def load_or_generate_key():
     """
