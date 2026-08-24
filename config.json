@@ -6,5 +6,7 @@
     "_comment_tolerance": "Biometric strictness. Lower = stricter matching (fewer false positives, more false negatives). Default 0.6.",
     "face_match_tolerance": 0.6,
     "_comment_max_pause": "Maximum seconds the user can pause monitoring before the fail-safe auto-resumes.",
-    "max_pause_duration_seconds": 60
+    "max_pause_duration_seconds": 60,
+    "_comment_alerting": "Webhook URL for Real-Time Incident Alerting (e.g., Discord). Leave empty to disable.",
+    "discord_webhook_url": ""
 }

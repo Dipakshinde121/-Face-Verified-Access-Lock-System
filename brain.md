@@ -30,6 +30,6 @@ This document serves as the central knowledge base, architectural overview, and 
 ## Roadmap / Next Tasks
 
 - [ ] **Task 1: Liveness Detection (Anti-Spoofing)** - Implement blink detection or depth analysis to prevent attackers from bypassing the system using photographs or videos on phones.
-- [ ] **Task 2: Data-at-Rest Encryption** - Use `cryptography.fernet` to encrypt the 128-d face encodings in the SQLite database, protecting sensitive PII in case the `.db` file is stolen.
+- [x] **Task 2: Data-at-Rest Encryption** - Used `cryptography.fernet` to encrypt the 128-d face encodings in the SQLite database, protecting sensitive biometric PII in case the `.db` file is stolen.
 - [ ] **Task 3: Multi-Factor Authentication (MFA)** - Add a PIN or Google Authenticator TOTP requirement to the `login.py` script.
-- [ ] **Task 4: Real-Time Incident Alerting** - Add webhook integration (e.g., Discord/Slack) to send a push notification when a `HIGH` severity impersonation attempt occurs.
+- [x] **Task 4: Real-Time Incident Alerting** - Added webhook integration (Discord) to send a push notification when a `HIGH` severity impersonation attempt occurs, completely decoupling the alerting from the core fail-safe lock.

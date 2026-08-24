@@ -125,6 +125,11 @@ class ContinuousVerificationThread(threading.Thread):
                 else:
                     print("\n\n[SECURITY ALERT] Unrecognized face detected at terminal! Locking immediately.")
                     log_event(self.session_state.roll_number, "LOCK_FACE_MISMATCH", severity="HIGH")
+                    
+                    # DISPATCH REAL-TIME ALERT (Fail-Safe: will not block if network is down)
+                    import alerting
+                    alerting.trigger_high_severity_alert(self.session_state.roll_number)
+                    
                     self.trigger_lock()
 
             # Wait for next interval if still running

@@ -71,6 +71,11 @@ def add_student(roll_number, name, face_encoding, db_path=DB_PATH):
     """
     # Serialize numpy array to bytes
     serialized_encoding = pickle.dumps(face_encoding)
+    
+    # ENCRYPT-THEN-STORE: Encrypt the biometric PII before it hits the disk
+    import crypto_utils
+    encrypted_encoding = crypto_utils.encrypt_data(serialized_encoding)
+    
     registered_date = datetime.now().isoformat()
     
     conn = get_db_connection(db_path)
@@ -81,7 +86,7 @@ def add_student(roll_number, name, face_encoding, db_path=DB_PATH):
             INSERT OR REPLACE INTO students (roll_number, name, face_encoding, registered_date)
             VALUES (?, ?, ?, ?)
             """,
-            (roll_number, name, serialized_encoding, registered_date)
+            (roll_number, name, encrypted_encoding, registered_date)
         )
         conn.commit()
         return True
@@ -107,23 +112,18 @@ def get_face_by_roll(roll_number, db_path=DB_PATH):
     Returns:
         numpy.ndarray: The 128-dimensional face encoding vector, or None if not found/error.
     """
-    # Future scale replacement example:
-    # try:
-    #     response = requests.get(f"https://central-auth-api/api/students/{roll_number}/encoding")
-    #     if response.status_code == 200:
-    #         data = response.json()
-    #         return np.array(data["encoding"], dtype=np.float64)
-    # except Exception as e:
-    #     print(f"[API Error] Failed to contact central auth API: {e}")
-    #     return None
-
     conn = get_db_connection(db_path)
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT face_encoding FROM students WHERE roll_number = ?", (roll_number,))
         row = cursor.fetchone()
         if row:
-            serialized_encoding = row[0]
+            encrypted_encoding = row[0]
+            
+            # DECRYPT-IN-MEMORY: Decrypt the cipher back to bytes only in RAM
+            import crypto_utils
+            serialized_encoding = crypto_utils.decrypt_data(encrypted_encoding)
+            
             face_encoding = pickle.loads(serialized_encoding)
             return face_encoding
         return None
