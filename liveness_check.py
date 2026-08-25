@@ -24,7 +24,7 @@ def eye_aspect_ratio(eye):
     ear = (A + B) / (2.0 * C)
     return ear
 
-def run_liveness_challenge(predictor_filename="shape_predictor_68_face_landmarks.dat", challenge_duration=5.0):
+def run_liveness_challenge(predictor_filename="shape_predictor_68_face_landmarks.dat", challenge_duration=10.0):
     """
     Runs a live webcam feed for a set duration, forcing the user to blink 
     to prove they are a live human and not a static photograph (Anti-Spoofing).
@@ -47,7 +47,8 @@ def run_liveness_challenge(predictor_filename="shape_predictor_68_face_landmarks
     (lStart, lEnd) = (42, 48)
     (rStart, rEnd) = (36, 42)
     
-    EAR_THRESHOLD = 0.22  # Drop below this means eye is closed
+    # Increased threshold from 0.22 to 0.25 to make blink detection more forgiving for glasses/lighting
+    EAR_THRESHOLD = 0.25  
     EAR_CONSEC_FRAMES = 2 # Must be closed for at least 2 consecutive frames
     
     counter = 0
