@@ -7,7 +7,7 @@ class SessionState:
     """
     Stores the active user session data.
     Structured as a class so that future periodic verification
-    scripts (Day 3/4) can easily access and validate the current state.
+    scripts can easily access and validate the current state.
     """
     def __init__(self, roll_number, name, face_encoding):
         self.roll_number = roll_number
