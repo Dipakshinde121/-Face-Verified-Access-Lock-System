@@ -1,7 +1,9 @@
 from fastapi import FastAPI, Depends, HTTPException, Security, status
-from fastapi.security import APIKeyHeader
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 import base64
+import jwt
+from datetime import datetime, timedelta
 from typing import List
 
 from server.database import (
@@ -9,24 +11,63 @@ from server.database import (
     log_event_server, get_logs_server
 )
 
-app = FastAPI(title="Lab Access Control Central API")
+app = FastAPI(title="Lab Access Control Central API (JWT Protected)")
 
-# Setup API Key authentication
-API_KEY = "super-secret-lab-key" # In production, use OAuth2/JWT or load from env vars
-api_key_header = APIKeyHeader(name="X-API-Key", auto_error=True)
+# --- JWT OAUTH2 SECURITY CONFIGURATION ---
+JWT_SECRET = "highly-complex-production-signature-key-2026"
+JWT_ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-def get_api_key(api_key_header: str = Security(api_key_header)):
-    if api_key_header != API_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API Key"
-        )
-    return api_key_header
+# In a real system, these would be in a database of registered devices.
+# For this lab, we authorize "lab-pc-01" as a trusted client.
+REGISTERED_CLIENTS = {
+    "lab-pc-01": "secure-lab-password-123"
+}
 
-# Initialize DB on startup
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return encoded_jwt
+
+def verify_jwt_token(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        client_id: str = payload.get("sub")
+        if client_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token payload")
+        return client_id
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired. Please authenticate again.")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token signature")
+
+# --- ENDPOINTS ---
+
 @app.on_event("startup")
 def startup_event():
     init_db()
+
+@app.post("/token", summary="Issue JWT Access Token")
+def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    # Verify the Lab PC's credentials
+    client_id = form_data.username
+    client_secret = form_data.password
+    
+    if client_id not in REGISTERED_CLIENTS or REGISTERED_CLIENTS[client_id] != client_secret:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect Client ID or Secret",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Issue the temporary JWT
+    access_token = create_access_token(data={"sub": client_id})
+    return {"access_token": access_token, "token_type": "bearer"}
+
 
 # Pydantic models for data validation
 class RegisterRequest(BaseModel):
@@ -40,7 +81,7 @@ class LogEventRequest(BaseModel):
     event: str
     severity: str = "INFO"
 
-@app.post("/register", dependencies=[Depends(get_api_key)])
+@app.post("/register", dependencies=[Depends(verify_jwt_token)])
 def register_student(req: RegisterRequest):
     try:
         enc_face = base64.b64decode(req.face_encoding_b64)
@@ -53,7 +94,7 @@ def register_student(req: RegisterRequest):
         raise HTTPException(status_code=500, detail="Database write failed")
     return {"message": f"Successfully registered {req.roll_number}"}
 
-@app.get("/student/{roll_number}", dependencies=[Depends(get_api_key)])
+@app.get("/student/{roll_number}", dependencies=[Depends(verify_jwt_token)])
 def get_student(roll_number: str):
     data = get_student_server(roll_number)
     if not data:
@@ -68,13 +109,13 @@ def get_student(roll_number: str):
         "registered_date": data["registered_date"]
     }
 
-@app.post("/log", dependencies=[Depends(get_api_key)])
+@app.post("/log", dependencies=[Depends(verify_jwt_token)])
 def log_event(req: LogEventRequest):
     success = log_event_server(req.roll_number, req.event, req.severity)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to write log")
     return {"message": "Event logged"}
 
-@app.get("/logs", dependencies=[Depends(get_api_key)])
+@app.get("/logs", dependencies=[Depends(verify_jwt_token)])
 def get_logs():
     return {"logs": get_logs_server()}
