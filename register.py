@@ -3,7 +3,7 @@ import face_recognition
 import numpy as np
 import time
 import sys
-from src.database import init_db, add_student, get_student_by_roll, log_event
+from src.api_client import init_db, add_student, get_student_by_roll, log_event, ServerUnreachableError
 
 def get_valid_input(prompt, error_msg="Input cannot be empty. Please try again."):
     """
@@ -240,4 +240,8 @@ def main():
         print("Registration process finished.")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except ServerUnreachableError as e:
+        print(f"\n[SECURITY] API Server is Unreachable: {e}")
+        print("Registration is disabled until connection is restored.")

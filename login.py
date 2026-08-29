@@ -1,6 +1,7 @@
 import sys
+import time
 from datetime import datetime
-from src.database import get_student_by_roll, get_face_by_roll, log_event, init_db
+from src.api_client import get_student_by_roll, get_face_by_roll, log_event, init_db, ServerUnreachableError
 
 class SessionState:
     """
@@ -57,7 +58,7 @@ def main():
             # --- MFA CHALLENGE (TOTP) ---
             print("\n[SECURITY] Initiating Multi-Factor Authentication...")
             import pyotp
-            from src.database import get_totp_secret_by_roll
+            from src.api_client import get_totp_secret_by_roll
             
             totp_secret = get_totp_secret_by_roll(roll_input)
             if not totp_secret:
@@ -128,6 +129,10 @@ def main():
             # Handle Ctrl+C at the main login prompt
             print("\nExiting application.")
             sys.exit(0)
+        except ServerUnreachableError as e:
+            print(f"\n[SECURITY] API Server is Unreachable: {e}")
+            print("System is operating in FAIL-CLOSED mode. Logins are disabled until connection is restored.")
+            time.sleep(2)
 
 if __name__ == "__main__":
     main()

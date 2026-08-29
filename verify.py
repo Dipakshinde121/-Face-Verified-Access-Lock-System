@@ -6,7 +6,7 @@ import _thread
 import os
 import platform
 import json
-from src.database import log_event
+from src.api_client import log_event
 
 def load_config():
     import os
@@ -51,7 +51,7 @@ class ContinuousVerificationThread(threading.Thread):
         if not self.is_paused:
             self.is_paused = True
             self.pause_start_time = time.time()
-            log_event(self.session_state.roll_number, "POLICY_OVERRIDE", severity="MEDIUM")
+            self._log_and_check("POLICY_OVERRIDE", severity="MEDIUM")
 
     def resume_monitoring(self):
         """Manually resumes monitoring."""
@@ -59,7 +59,14 @@ class ContinuousVerificationThread(threading.Thread):
             self.is_paused = False
             self.pause_start_time = 0
             self.missed_checks = 0 # Reset grace period when resuming
-            log_event(self.session_state.roll_number, "POLICY_RESUMED", severity="INFO")
+            self._log_and_check("POLICY_RESUMED", severity="INFO")
+
+    def _log_and_check(self, event, severity="INFO"):
+        """Wrapper for API logging that implements a strict FAIL-CLOSED policy."""
+        success = log_event(self.session_state.roll_number, event, severity=severity)
+        if not success:
+            print("\n[SECURITY] Central API Unreachable! Triggering Fail-Closed lockdown.")
+            self.trigger_lock()
 
     def run(self):
         # Initial sleep so we don't check instantly after login
@@ -72,7 +79,7 @@ class ContinuousVerificationThread(threading.Thread):
                     self.is_paused = False
                     self.pause_start_time = 0
                     self.missed_checks = 0
-                    log_event(self.session_state.roll_number, "AUTO_RESUME_FAILSAFE", severity="HIGH")
+                    self._log_and_check("AUTO_RESUME_FAILSAFE", severity="HIGH")
                 else:
                     time.sleep(1)
                     continue
@@ -80,7 +87,7 @@ class ContinuousVerificationThread(threading.Thread):
             # 1. Capture a fresh frame
             cap = cv2.VideoCapture(0)
             if not cap.isOpened():
-                log_event(self.session_state.roll_number, "PERIODIC_CHECK_ERROR_CAMERA", severity="MEDIUM")
+                self._log_and_check("PERIODIC_CHECK_ERROR_CAMERA", severity="MEDIUM")
                 self._sleep_interval()
                 continue
                 
@@ -91,7 +98,7 @@ class ContinuousVerificationThread(threading.Thread):
             cap.release()
 
             if not ret or frame is None:
-                log_event(self.session_state.roll_number, "PERIODIC_CHECK_ERROR_FRAME", severity="MEDIUM")
+                self._log_and_check("PERIODIC_CHECK_ERROR_FRAME", severity="MEDIUM")
                 self._sleep_interval()
                 continue
 
@@ -102,11 +109,11 @@ class ContinuousVerificationThread(threading.Thread):
             # --- THREAT MODEL A: No face detected (User stepped away) ---
             if len(face_locations) == 0:
                 self.missed_checks += 1
-                log_event(self.session_state.roll_number, f"PERIODIC_CHECK_NO_FACE (Missed: {self.missed_checks})", severity="INFO")
+                self._log_and_check(f"PERIODIC_CHECK_NO_FACE (Missed: {self.missed_checks})", severity="INFO")
                 
                 if self.missed_checks >= self.max_missed_checks:
                     print(f"\n\n[SECURITY] Grace period expired. No face detected for {self.check_interval * self.max_missed_checks}s. Locking session.")
-                    log_event(self.session_state.roll_number, "LOCK_NO_FACE_TIMEOUT", severity="LOW")
+                    self._log_and_check("LOCK_NO_FACE_TIMEOUT", severity="LOW")
                     self.trigger_lock()
             else:
                 # 3. Face(s) detected, extract encodings
@@ -122,12 +129,12 @@ class ContinuousVerificationThread(threading.Thread):
                 # --- THREAT MODEL C: Face Matches (Authorized User) ---
                 if match_found:
                     self.missed_checks = 0 # Reset grace period
-                    log_event(self.session_state.roll_number, "PERIODIC_CHECK_SUCCESS", severity="INFO")
+                    self._log_and_check("PERIODIC_CHECK_SUCCESS", severity="INFO")
                     
                 # --- THREAT MODEL B: Different Face (Impersonation Attempt) ---
                 else:
                     print("\n\n[SECURITY ALERT] Unrecognized face detected at terminal! Locking immediately.")
-                    log_event(self.session_state.roll_number, "LOCK_FACE_MISMATCH", severity="HIGH")
+                    self._log_and_check("LOCK_FACE_MISMATCH", severity="HIGH")
                     
                     # DISPATCH REAL-TIME ALERT (Fail-Safe: will not block if network is down)
                     import alerting
