@@ -38,6 +38,6 @@ def decrypt_data(encrypted_bytes: bytes) -> bytes:
     try:
         return _cipher_suite.decrypt(encrypted_bytes)
     except InvalidToken:
-        # Fallback for biometric data registered before Encryption at Rest was implemented.
-        # In a strict production environment, this would raise a hard error instead.
-        return encrypted_bytes
+        # STRICT SECURITY ENFORCEMENT:
+        # If decryption fails, it implies the data was tampered with or corrupted.
+        raise ValueError("TAMPER_DETECTED: Cryptographic signature mismatch.")

@@ -99,10 +99,15 @@ def get_face_by_roll(roll_number):
     """
     data = _get_student_data(roll_number)
     if data:
-        # E2EE: Decrypt locally
-        encrypted_encoding = base64.b64decode(data["face_encoding_b64"])
-        serialized_encoding = crypto_utils.decrypt_data(encrypted_encoding)
-        return pickle.loads(serialized_encoding)
+        try:
+            # E2EE: Decrypt locally
+            encrypted_encoding = base64.b64decode(data["face_encoding_b64"])
+            serialized_encoding = crypto_utils.decrypt_data(encrypted_encoding)
+            return pickle.loads(serialized_encoding)
+        except ValueError as e:
+            print(f"\n[SECURITY] {e}")
+            log_event(roll_number, "TAMPER_DETECTED_FACE_DATA", severity="HIGH")
+            return None
     return None
 
 def get_totp_secret_by_roll(roll_number):
@@ -111,8 +116,13 @@ def get_totp_secret_by_roll(roll_number):
     """
     data = _get_student_data(roll_number)
     if data:
-        encrypted_totp = base64.b64decode(data["totp_secret_b64"])
-        return crypto_utils.decrypt_data(encrypted_totp).decode('utf-8')
+        try:
+            encrypted_totp = base64.b64decode(data["totp_secret_b64"])
+            return crypto_utils.decrypt_data(encrypted_totp).decode('utf-8')
+        except ValueError as e:
+            print(f"\n[SECURITY] {e}")
+            log_event(roll_number, "TAMPER_DETECTED_TOTP_DATA", severity="HIGH")
+            return None
     return None
 
 def get_student_by_roll(roll_number):

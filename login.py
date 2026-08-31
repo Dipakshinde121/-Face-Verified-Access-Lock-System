@@ -24,6 +24,8 @@ def main():
     
     # Initialize DB just in case it hasn't been created yet
     init_db()
+    
+    failed_attempts = {}
 
     while True:
         try:
@@ -36,6 +38,11 @@ def main():
                 
             if not roll_input:
                 print("[Error] Roll number cannot be empty. Please try again.")
+                continue
+                
+            if failed_attempts.get(roll_input, 0) >= 3:
+                print("\n[SECURITY] ACCOUNT LOCKED OUT. Too many failed attempts.")
+                print("Brute-force protection enabled. Please contact administrator.")
                 continue
                 
             # Fetch student details (name, registered_date)
@@ -73,6 +80,7 @@ def main():
             if not totp.verify(user_code, valid_window=1):
                 print("\n[SECURITY ALERT] Invalid MFA Code! Access Denied.")
                 log_event(roll_input, "LOGIN_DENIED_INVALID_TOTP", severity="HIGH")
+                failed_attempts[roll_input] = failed_attempts.get(roll_input, 0) + 1
                 import alerting
                 alerting.trigger_high_severity_alert(roll_input, "Failed MFA Code (Invalid TOTP)")
                 continue
@@ -87,11 +95,15 @@ def main():
             if not liveness_passed:
                 print("\n[SECURITY ALERT] Liveness check failed! Possible presentation attack.")
                 log_event(roll_input, "LOGIN_DENIED_LIVENESS_FAIL", severity="HIGH")
+                failed_attempts[roll_input] = failed_attempts.get(roll_input, 0) + 1
                 
                 # Dispatch real-time alert for this high-severity spoofing attempt
                 import alerting
                 alerting.trigger_high_severity_alert(roll_input, "Failed Liveness Check (Possible Presentation/Spoofing Attack)")
                 continue
+            
+            # Reset failed attempts on success
+            failed_attempts[roll_input] = 0
             
             # 4 & 5: Setup Session and Log Event
             active_session = SessionState(roll_input, name, face_encoding)
@@ -123,7 +135,13 @@ def main():
                     tray_app.icon.stop()
                 log_event(roll_input, "LOGOUT_OR_LOCK")
                 print("Session terminated.")
-                break # Go back to main login prompt
+                
+                # Explicitly tear down session state to prevent cross-user leakage (Session Fixation risk)
+                del active_session
+                del verification_thread
+                del tray_app
+                
+                continue # Go back to main login prompt
 
         except KeyboardInterrupt:
             # Handle Ctrl+C at the main login prompt

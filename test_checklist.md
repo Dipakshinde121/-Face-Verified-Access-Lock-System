@@ -30,3 +30,8 @@ This checklist contains edge-case testing scenarios to validate the reliability 
 ## 5. Centralized Server & Alerts
 - [ ] **Multi-Client Isolation:** Run `login.py` simultaneously from two different terminals with two different roll numbers. *Expected:* Both sessions maintain their own local state and do not interfere with each other. Both successfully log heartbeats to the central API.
 - [ ] **Webhook Filtering:** Ensure Discord alerts only trigger on HIGH severity events (like MFA failures or face mismatches), not on INFO events.
+
+## 6. Advanced Stress Tests (Failure Paths)
+- [ ] **Brute-Force Lockout:** Rapidly fail the TOTP or Liveness challenge 3 times in a row for the same roll number. *Expected:* The account is temporarily locked on that terminal ("ACCOUNT LOCKED OUT"), preventing unbounded retry loops.
+- [ ] **Database Tampering / Corruption:** Manually edit `access_control.db` and scramble the bytes of a user's `face_encoding` blob. Attempt to log in. *Expected:* The cryptographic signature check fails (`crypto_utils.py`), preventing a crash and securely logging `TAMPER_DETECTED_FACE_DATA` as a HIGH severity event.
+- [ ] **Session Fixation / State Leakage:** Log in as User A, lock the screen (Ctrl+C), then immediately log in as User B on the same terminal. *Expected:* All session variables (`active_session`, `verification_thread`) are explicitly destroyed and rebuilt. No state from User A leaks into User B.
