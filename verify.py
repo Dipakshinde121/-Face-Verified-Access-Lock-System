@@ -42,24 +42,29 @@ class ContinuousVerificationThread(threading.Thread):
         # Anti-Tamper & Pause State
         self.is_paused = False
         self.pause_start_time = 0
+        
+        # Concurrency Lock
+        self.state_lock = threading.Lock()
 
     def stop(self):
         self.running = False
 
     def pause_monitoring(self):
         """Auditable policy override to temporarily pause webcam checks."""
-        if not self.is_paused:
-            self.is_paused = True
-            self.pause_start_time = time.time()
-            self._log_and_check("POLICY_OVERRIDE", severity="MEDIUM")
+        with self.state_lock:
+            if not self.is_paused:
+                self.is_paused = True
+                self.pause_start_time = time.time()
+                self._log_and_check("POLICY_OVERRIDE", severity="MEDIUM")
 
     def resume_monitoring(self):
         """Manually resumes monitoring."""
-        if self.is_paused:
-            self.is_paused = False
-            self.pause_start_time = 0
-            self.missed_checks = 0 # Reset grace period when resuming
-            self._log_and_check("POLICY_RESUMED", severity="INFO")
+        with self.state_lock:
+            if self.is_paused:
+                self.is_paused = False
+                self.pause_start_time = 0
+                self.missed_checks = 0 # Reset grace period when resuming
+                self._log_and_check("POLICY_RESUMED", severity="INFO")
 
     def _log_and_check(self, event, severity="INFO"):
         """Wrapper for API logging that implements a strict FAIL-CLOSED policy."""
@@ -74,15 +79,16 @@ class ContinuousVerificationThread(threading.Thread):
         
         while self.running:
             # --- FAIL-SAFE / ANTI-TAMPER CHECK ---
-            if self.is_paused:
-                if time.time() - self.pause_start_time > self.max_pause_duration:
-                    self.is_paused = False
-                    self.pause_start_time = 0
-                    self.missed_checks = 0
-                    self._log_and_check("AUTO_RESUME_FAILSAFE", severity="HIGH")
-                else:
-                    time.sleep(1)
-                    continue
+            with self.state_lock:
+                if self.is_paused:
+                    if time.time() - self.pause_start_time > self.max_pause_duration:
+                        self.is_paused = False
+                        self.pause_start_time = 0
+                        self.missed_checks = 0
+                        self._log_and_check("AUTO_RESUME_FAILSAFE", severity="HIGH")
+                    else:
+                        time.sleep(1)
+                        continue
 
             # 1. Capture a fresh frame
             cap = cv2.VideoCapture(0)
@@ -91,11 +97,16 @@ class ContinuousVerificationThread(threading.Thread):
                 self._sleep_interval()
                 continue
                 
-            # Read a few frames to let the camera sensor adjust to lighting
-            for _ in range(5):
-                cap.read()
-            ret, frame = cap.read()
-            cap.release()
+            try:
+                # Read a few frames to let the camera sensor adjust to lighting
+                for _ in range(5):
+                    cap.read()
+                ret, frame = cap.read()
+            except Exception as e:
+                print(f"[Error] Camera read failed: {e}")
+                ret, frame = False, None
+            finally:
+                cap.release()
 
             if not ret or frame is None:
                 self._log_and_check("PERIODIC_CHECK_ERROR_FRAME", severity="MEDIUM")
@@ -108,10 +119,12 @@ class ContinuousVerificationThread(threading.Thread):
             
             # --- THREAT MODEL A: No face detected (User stepped away) ---
             if len(face_locations) == 0:
-                self.missed_checks += 1
-                self._log_and_check(f"PERIODIC_CHECK_NO_FACE (Missed: {self.missed_checks})", severity="INFO")
+                with self.state_lock:
+                    self.missed_checks += 1
+                    current_missed = self.missed_checks
+                self._log_and_check(f"PERIODIC_CHECK_NO_FACE (Missed: {current_missed})", severity="INFO")
                 
-                if self.missed_checks >= self.max_missed_checks:
+                if current_missed >= self.max_missed_checks:
                     print(f"\n\n[SECURITY] Grace period expired. No face detected for {self.check_interval * self.max_missed_checks}s. Locking session.")
                     self._log_and_check("LOCK_NO_FACE_TIMEOUT", severity="LOW")
                     self.trigger_lock()
@@ -128,7 +141,8 @@ class ContinuousVerificationThread(threading.Thread):
 
                 # --- THREAT MODEL C: Face Matches (Authorized User) ---
                 if match_found:
-                    self.missed_checks = 0 # Reset grace period
+                    with self.state_lock:
+                        self.missed_checks = 0 # Reset grace period
                     self._log_and_check("PERIODIC_CHECK_SUCCESS", severity="INFO")
                     
                 # --- THREAT MODEL B: Different Face (Impersonation Attempt) ---
