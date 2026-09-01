@@ -3,12 +3,16 @@ import pickle
 import base64
 import os
 import crypto_utils
+import urllib3
+
+# Suppress the InsecureRequestWarning for our local self-signed certificate demo
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Base URL for the FastAPI Server
-# SECURITY WARNING: For local testing this is HTTP. In production, this MUST be HTTPS
-# to prevent MITM (Man-In-The-Middle) attacks from stealing the JWT token or observing
-# metadata about the encrypted payloads.
-BASE_URL = "http://127.0.0.1:8000"
+# SECURITY WARNING: For local testing this is HTTPS with a self-signed certificate.
+# In a real production deployment, you MUST use a certificate signed by a trusted CA 
+# and remove the `verify=False` flags below.
+BASE_URL = "https://127.0.0.1:8000"
 
 # Hardcoded Lab PC credentials for the OAuth2 /token endpoint
 CLIENT_ID = "lab-pc-01"
@@ -29,10 +33,13 @@ def _get_auth_header():
     
     if _ACCESS_TOKEN is None:
         try:
+            # DEMO NOTE: verify=False is used here because our TLS cert is self-signed.
+            # Real deployments MUST remove this and use a trusted CA cert.
             response = requests.post(
                 f"{BASE_URL}/token",
                 data={"username": CLIENT_ID, "password": CLIENT_SECRET},
-                timeout=5
+                timeout=5,
+                verify=False
             )
             response.raise_for_status()
             _ACCESS_TOKEN = response.json().get("access_token")
@@ -47,6 +54,8 @@ def _refresh_token_if_needed(func, *args, **kwargs):
     """
     global _ACCESS_TOKEN
     try:
+        # Pass verify=False dynamically to whatever request function we are wrapping
+        kwargs['verify'] = False
         response = func(*args, **kwargs)
         if response.status_code == 401:
             # Token might be expired, clear it and retry once

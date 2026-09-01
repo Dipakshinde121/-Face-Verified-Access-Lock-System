@@ -119,3 +119,19 @@ def log_event(req: LogEventRequest):
 @app.get("/logs", dependencies=[Depends(verify_jwt_token)])
 def get_logs():
     return {"logs": get_logs_server()}
+
+if __name__ == "__main__":
+    import uvicorn
+    import os
+    
+    # Run the server over HTTPS using our self-signed TLS certs
+    key_path = os.path.join(os.path.dirname(__file__), "key.pem")
+    cert_path = os.path.join(os.path.dirname(__file__), "cert.pem")
+    
+    uvicorn.run(
+        "main:app", 
+        host="127.0.0.1", 
+        port=8000, 
+        ssl_keyfile=key_path, 
+        ssl_certfile=cert_path
+    )

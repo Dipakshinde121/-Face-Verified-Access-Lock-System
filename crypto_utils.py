@@ -1,26 +1,27 @@
 import os
+import keyring
 from cryptography.fernet import Fernet, InvalidToken
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-KEY_FILE = os.path.join(BASE_DIR, "secret.key")
+SERVICE_NAME = "LabAccessControlSystem"
+ACCOUNT_NAME = "fernet_key"
 
 def load_or_generate_key():
     """
-    Loads the symmetric encryption key from file. 
-    Generates and saves a new one if it doesn't exist.
+    Loads the symmetric encryption key from the OS Keyring.
     
-    SECURITY PRINCIPLE: Key/Data Separation. The key is kept in a local file,
-    excluded from version control, and entirely separate from the SQLite database.
-    If the database is stolen, the data remains unreadable without this key.
+    SECURITY PRINCIPLE: Key/Data Separation.
+    The key is managed by the OS Credential Manager. If the database file is stolen,
+    it cannot be decrypted without also compromising the host machine's secure enclave.
     """
-    if not os.path.exists(KEY_FILE):
-        key = Fernet.generate_key()
-        with open(KEY_FILE, "wb") as key_file:
-            key_file.write(key)
-        return key
-    else:
-        with open(KEY_FILE, "rb") as key_file:
-            return key_file.read()
+    key = keyring.get_password(SERVICE_NAME, ACCOUNT_NAME)
+    
+    if key is None:
+        raise RuntimeError(
+            "[SECURITY ERROR] Encryption key not found in OS Keyring!\n"
+            "Please run 'python setup_key.py' to initialize the secure credential storage."
+        )
+        
+    return key.encode('utf-8')
 
 # Initialize the cipher suite globally for this module
 _key = load_or_generate_key()
