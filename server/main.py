@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, Security, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import base64
 import jwt
@@ -16,6 +17,9 @@ import uuid
 import secrets
 
 app = FastAPI(title="Lab Access Control Central API (JWT Protected)")
+
+# Mount the Vaporwave Dashboard
+app.mount("/dashboard", StaticFiles(directory="frontend", html=True), name="dashboard")
 
 # --- JWT OAUTH2 SECURITY CONFIGURATION ---
 JWT_SECRET = "highly-complex-production-signature-key-2026"

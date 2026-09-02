@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TERMINAL // ACCESS CONTROL</title>
+    
+    <!-- Google Fonts: Orbitron & Share Tech Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    
+    <!-- Custom CSS for Vaporwave Effects -->
+    <link rel="stylesheet" href="/dashboard/styles.css">
+
+    <!-- Tailwind CSS CDN with Vaporwave Configuration -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        void: '#090014',
+                        magenta: '#FF00FF',
+                        cyan: '#00FFFF',
+                        sunset: '#FF9900',
+                        glass: 'rgba(26, 16, 60, 0.8)',
+                        borderDefault: '#2D1B4E'
+                    },
+                    fontFamily: {
+                        heading: ['Orbitron', 'sans-serif'],
+                        mono: ['"Share Tech Mono"', 'monospace'],
+                    },
+                    boxShadow: {
+                        'neon-magenta': '0 0 10px #FF00FF, 0 0 20px #FF00FF',
+                        'neon-cyan': '0 0 10px rgba(0,255,255,0.5), 0 0 20px rgba(0,255,255,0.2)',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-void text-[#E0E0E0] font-mono min-h-screen overflow-x-hidden">
+    
+    <!-- Global CRT Scanlines Overlay -->
+    <div class="crt-overlay"></div>
+
+    <!-- Perspective Grid Floor -->
+    <div class="grid-floor"></div>
+
+    <!-- Floating Blurred Sun -->
+    <div class="floating-sun"></div>
+
+    <div class="relative z-10 container mx-auto px-4 py-8 max-w-7xl">
+        
+        <!-- Header -->
+        <header class="mb-12 border-b-2 border-cyan pb-4 flex justify-between items-end">
+            <div>
+                <h1 class="text-4xl md:text-6xl font-heading font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-sunset via-magenta to-cyan drop-shadow-[0_0_10px_rgba(255,0,255,0.6)]">
+                    LAB COMMAND
+                </h1>
+                <p class="text-cyan mt-2">> SYSTEM_STATUS: ONLINE</p>
+            </div>
+            
+            <div id="auth-status">
+                <button id="login-btn" class="cyber-btn border-cyan text-cyan hover:bg-cyan hover:text-black">
+                    <span class="inline-block skew-x-12">> AUTHENTICATE</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content Grid -->
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-8" id="dashboard-content" style="display: none;">
+            
+            <!-- Security Logs Terminal -->
+            <section class="lg:col-span-2">
+                <div class="terminal-card">
+                    <div class="title-bar flex gap-2 items-center px-4 py-2 bg-cyan/10 border-b border-cyan">
+                        <div class="h-3 w-3 rounded-full bg-magenta"></div>
+                        <div class="h-3 w-3 rounded-full bg-cyan"></div>
+                        <div class="h-3 w-3 rounded-full bg-sunset"></div>
+                        <span class="ml-4 font-heading text-sm text-cyan font-bold tracking-widest">SECURITY_LOGS.EXE</span>
+                    </div>
+                    <div class="p-6 bg-black/80 h-96 overflow-y-auto" id="logs-container">
+                        <!-- Logs injected here via JS -->
+                        <div class="text-magenta animate-pulse">> FETCHING LOGS...</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Device Management -->
+            <section class="lg:col-span-1">
+                <div class="glass-card">
+                    <h2 class="font-heading font-bold text-2xl text-cyan drop-shadow-[0_0_5px_rgba(0,255,255,0.8)] mb-6">
+                        ACTIVE DEVICES
+                    </h2>
+                    <div class="flex flex-col gap-4" id="devices-container">
+                        <!-- Devices injected here -->
+                        <div class="border border-borderDefault p-4 bg-void/50">
+                            <p class="text-sm text-[#E0E0E0]/70">No active devices found.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+        
+        <!-- Login Modal (Hidden by default) -->
+        <div id="login-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+            <div class="glass-card w-full max-w-md border-t-2 border-t-magenta border-l-2 border-l-cyan">
+                <h2 class="font-heading text-2xl text-magenta mb-6">> ADMIN_LOGIN</h2>
+                <div class="flex flex-col gap-6">
+                    <input type="text" id="admin-user" placeholder="USERNAME" class="cyber-input" value="lab-pc-01">
+                    <input type="password" id="admin-pass" placeholder="PASSWORD" class="cyber-input" value="secure-lab-password-123">
+                    <button id="submit-login" class="cyber-btn border-magenta text-magenta hover:bg-magenta hover:text-white mt-4">
+                        <span class="inline-block skew-x-12">INITIALIZE UPLINK</span>
+                    </button>
+                    <p id="login-error" class="text-red-500 text-sm hidden"></p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="/dashboard/app.js"></script>
+</body>
+</html>
