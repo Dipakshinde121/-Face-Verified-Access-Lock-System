@@ -4,22 +4,13 @@ import base64
 import os
 import crypto_utils
 import urllib3
+import keyring
 
 # Suppress the InsecureRequestWarning for our local self-signed certificate demo
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Base URL for the FastAPI Server
-# SECURITY WARNING: For local testing this is HTTPS with a self-signed certificate.
-# In a real production deployment, you MUST use a certificate signed by a trusted CA 
-# and remove the `verify=False` flags below.
 BASE_URL = "https://127.0.0.1:8000"
-
-# Hardcoded Lab PC credentials for the OAuth2 /token endpoint
-CLIENT_ID = "lab-pc-01"
-CLIENT_SECRET = "secure-lab-password-123"
-
-# In-memory token cache
-_ACCESS_TOKEN = None
+SERVICE_NAME = "LabAccessControlSystem"
 
 class ServerUnreachableError(Exception):
     """Exception raised when the central server is down (triggers fail-closed)."""
@@ -27,39 +18,55 @@ class ServerUnreachableError(Exception):
 
 def _get_auth_header():
     """
-    Fetches the JWT token. If not cached or expired, authenticates with the server.
+    Fetches the JWT token from the Keyring. If not cached or expired, authenticates with the server.
     """
-    global _ACCESS_TOKEN
+    jwt_token = keyring.get_password(SERVICE_NAME, "jwt_access_token")
     
-    if _ACCESS_TOKEN is None:
+    if not jwt_token:
+        # We need a new token. Fetch our unique device credentials from Keyring.
+        device_id = keyring.get_password(SERVICE_NAME, "device_id")
+        device_secret = keyring.get_password(SERVICE_NAME, "device_secret")
+        
+        if not device_id or not device_secret:
+            raise RuntimeError("Device not registered. Please run 'python setup_device.py' first.")
+            
         try:
             # DEMO NOTE: verify=False is used here because our TLS cert is self-signed.
-            # Real deployments MUST remove this and use a trusted CA cert.
             response = requests.post(
                 f"{BASE_URL}/token",
-                data={"username": CLIENT_ID, "password": CLIENT_SECRET},
+                data={"username": device_id, "password": device_secret},
                 timeout=5,
                 verify=False
             )
+            
+            if response.status_code == 403:
+                raise ServerUnreachableError("ACCESS DENIED: This device has been revoked by the administrator.")
+                
             response.raise_for_status()
-            _ACCESS_TOKEN = response.json().get("access_token")
+            jwt_token = response.json().get("access_token")
+            
+            # Store the new short-lived JWT safely in the OS Keyring
+            keyring.set_password(SERVICE_NAME, "jwt_access_token", jwt_token)
+            
         except requests.exceptions.RequestException as e:
             raise ServerUnreachableError(f"Could not reach API for authentication: {e}")
             
-    return {"Authorization": f"Bearer {_ACCESS_TOKEN}"}
+    return {"Authorization": f"Bearer {jwt_token}"}
 
 def _refresh_token_if_needed(func, *args, **kwargs):
     """
-    Wrapper to automatically refresh the JWT if we get a 401 Unauthorized (token expired).
+    Wrapper to automatically refresh the JWT if we get a 401 Unauthorized or 403 Forbidden.
     """
-    global _ACCESS_TOKEN
     try:
-        # Pass verify=False dynamically to whatever request function we are wrapping
         kwargs['verify'] = False
         response = func(*args, **kwargs)
-        if response.status_code == 401:
-            # Token might be expired, clear it and retry once
-            _ACCESS_TOKEN = None
+        if response.status_code in (401, 403):
+            # Token might be expired or device revoked, clear it from Keyring and retry once
+            try:
+                keyring.delete_password(SERVICE_NAME, "jwt_access_token")
+            except keyring.errors.PasswordDeleteError:
+                pass # Already deleted or not found
+                
             kwargs['headers'] = _get_auth_header()
             response = func(*args, **kwargs)
         return response

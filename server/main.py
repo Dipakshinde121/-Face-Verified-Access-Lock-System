@@ -7,43 +7,54 @@ from datetime import datetime, timedelta
 from typing import List
 
 from server.database import (
-    init_db, add_student_server, get_student_server, 
+    init_db, register_device_server, get_device_server,
+    add_student_server, get_student_server, 
     log_event_server, get_logs_server
 )
+
+import uuid
+import secrets
 
 app = FastAPI(title="Lab Access Control Central API (JWT Protected)")
 
 # --- JWT OAUTH2 SECURITY CONFIGURATION ---
 JWT_SECRET = "highly-complex-production-signature-key-2026"
 JWT_ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-
-# In a real system, these would be in a database of registered devices.
-# For this lab, we authorize "lab-pc-01" as a trusted client.
-REGISTERED_CLIENTS = {
-    "lab-pc-01": "secure-lab-password-123"
-}
+# Principle of Least Privilege: Short-lived tokens to reduce damage window
+ACCESS_TOKEN_EXPIRE_HOURS = 24
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 def create_access_token(data: dict):
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
+    now = datetime.utcnow()
+    expire = now + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
+    to_encode.update({"iat": now, "exp": expire})
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
     return encoded_jwt
 
 def verify_jwt_token(token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        client_id: str = payload.get("sub")
-        if client_id is None:
-            raise HTTPException(status_code=401, detail="Invalid token payload")
-        return client_id
+        device_id: str = payload.get("device_id")
+        if device_id is None:
+            raise HTTPException(status_code=403, detail="Invalid token payload")
+            
+        # Additional Security Check: Was the device revoked mid-session?
+        device = get_device_server(device_id)
+        if not device or device.get("is_revoked"):
+            print(f"[SECURITY] Access Denied: Device {device_id} has been revoked!")
+            log_event_server("SYSTEM", f"API_AUTH_FAILED_REVOKED_DEVICE ({device_id})", severity="HIGH")
+            raise HTTPException(status_code=403, detail="Device has been revoked by administrator.")
+            
+        return device_id
+        
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired. Please authenticate again.")
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token signature")
+        print("[SECURITY] Invalid or tampered JWT token received!")
+        log_event_server("SYSTEM", "API_AUTH_FAILED_INVALID_TOKEN", severity="HIGH")
+        raise HTTPException(status_code=403, detail="Invalid token signature")
 
 # --- ENDPOINTS ---
 
@@ -51,21 +62,42 @@ def verify_jwt_token(token: str = Depends(oauth2_scheme)):
 def startup_event():
     init_db()
 
-@app.post("/token", summary="Issue JWT Access Token")
-def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    # Verify the Lab PC's credentials
-    client_id = form_data.username
-    client_secret = form_data.password
+@app.post("/device/register", summary="Dynamically Register a New Lab PC")
+def register_device():
+    """
+    Registers a new Lab PC. Returns a unique device_id and device_secret.
+    In a real enterprise, this endpoint would itself be protected by an admin token,
+    or devices would be pre-provisioned. For this project, we allow dynamic provisioning.
+    """
+    device_id = f"lab-pc-{uuid.uuid4().hex[:8]}"
+    device_secret = secrets.token_urlsafe(32)
     
-    if client_id not in REGISTERED_CLIENTS or REGISTERED_CLIENTS[client_id] != client_secret:
+    success = register_device_server(device_id, device_secret)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to register device")
+        
+    return {"device_id": device_id, "device_secret": device_secret}
+
+@app.post("/token", summary="Issue Per-Device JWT Access Token")
+def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    # Verify the Lab PC's dynamic credentials
+    device_id = form_data.username
+    device_secret = form_data.password
+    
+    device = get_device_server(device_id)
+    
+    if not device or device.get("device_secret") != device_secret:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect Client ID or Secret",
+            detail="Incorrect Device ID or Secret",
             headers={"WWW-Authenticate": "Bearer"},
         )
+        
+    if device.get("is_revoked"):
+        raise HTTPException(status_code=403, detail="Device has been revoked.")
     
-    # Issue the temporary JWT
-    access_token = create_access_token(data={"sub": client_id})
+    # Issue the temporary JWT with the device_id claim
+    access_token = create_access_token(data={"device_id": device_id})
     return {"access_token": access_token, "token_type": "bearer"}
 
 
@@ -129,7 +161,7 @@ if __name__ == "__main__":
     cert_path = os.path.join(os.path.dirname(__file__), "cert.pem")
     
     uvicorn.run(
-        "main:app", 
+        "server.main:app", 
         host="127.0.0.1", 
         port=8000, 
         ssl_keyfile=key_path, 

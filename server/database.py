@@ -15,6 +15,17 @@ def init_db(db_path=DB_PATH):
     conn = get_db_connection(db_path)
     try:
         cursor = conn.cursor()
+        
+        # New Devices Table for Per-Device JWT Authentication
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS devices (
+            device_id TEXT PRIMARY KEY,
+            device_secret TEXT NOT NULL,
+            registered_date TEXT NOT NULL,
+            is_revoked BOOLEAN NOT NULL DEFAULT 0
+        );
+        """)
+        
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS students (
             roll_number TEXT PRIMARY KEY,
@@ -36,6 +47,44 @@ def init_db(db_path=DB_PATH):
         );
         """)
         conn.commit()
+    finally:
+        conn.close()
+
+def register_device_server(device_id: str, device_secret: str, db_path=DB_PATH):
+    registered_date = datetime.now().isoformat()
+    conn = get_db_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO devices (device_id, device_secret, registered_date, is_revoked)
+            VALUES (?, ?, ?, 0)
+            """,
+            (device_id, device_secret, registered_date)
+        )
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"[Server DB Error] Failed to register device {device_id}: {e}")
+        return False
+    finally:
+        conn.close()
+
+def get_device_server(device_id: str, db_path=DB_PATH):
+    conn = get_db_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT device_secret, is_revoked FROM devices WHERE device_id = ?", (device_id,))
+        row = cursor.fetchone()
+        if row:
+            return {
+                "device_secret": row[0],
+                "is_revoked": bool(row[1])
+            }
+        return None
+    except sqlite3.Error as e:
+        print(f"[Server DB Error] Failed to fetch device {device_id}: {e}")
+        return None
     finally:
         conn.close()
 
