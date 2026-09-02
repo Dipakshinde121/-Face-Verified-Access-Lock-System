@@ -1,104 +1,85 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TERMINAL // ACCESS CONTROL</title>
+    <title>ACCESS CONTROL</title>
     
-    <!-- Google Fonts: Orbitron & Share Tech Mono -->
+    <!-- Google Fonts: Playfair Display, Source Serif 4, JetBrains Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Source+Serif+4:wght@400;600&display=swap" rel="stylesheet">
     
-    <!-- Custom CSS for Vaporwave Effects -->
+    <!-- Custom CSS for Minimalist Monochrome Textures & Rules -->
     <link rel="stylesheet" href="/dashboard/styles.css">
 
-    <!-- Tailwind CSS CDN with Vaporwave Configuration -->
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
-            darkMode: 'class',
             theme: {
                 extend: {
                     colors: {
-                        void: '#090014',
-                        magenta: '#FF00FF',
-                        cyan: '#00FFFF',
-                        sunset: '#FF9900',
-                        glass: 'rgba(26, 16, 60, 0.8)',
-                        borderDefault: '#2D1B4E'
+                        background: '#FFFFFF',
+                        foreground: '#000000',
+                        muted: '#F5F5F5',
+                        mutedForeground: '#525252',
+                        borderLight: '#E5E5E5'
                     },
                     fontFamily: {
-                        heading: ['Orbitron', 'sans-serif'],
-                        mono: ['"Share Tech Mono"', 'monospace'],
-                    },
-                    boxShadow: {
-                        'neon-magenta': '0 0 10px #FF00FF, 0 0 20px #FF00FF',
-                        'neon-cyan': '0 0 10px rgba(0,255,255,0.5), 0 0 20px rgba(0,255,255,0.2)',
+                        display: ['"Playfair Display"', 'Georgia', 'serif'],
+                        body: ['"Source Serif 4"', 'Georgia', 'serif'],
+                        mono: ['"JetBrains Mono"', 'monospace'],
                     }
                 }
             }
         }
     </script>
 </head>
-<body class="bg-void text-[#E0E0E0] font-mono min-h-screen overflow-x-hidden">
+<body class="bg-background text-foreground font-body min-h-screen relative">
     
-    <!-- Global CRT Scanlines Overlay -->
-    <div class="crt-overlay"></div>
-
-    <!-- Perspective Grid Floor -->
-    <div class="grid-floor"></div>
-
-    <!-- Floating Blurred Sun -->
-    <div class="floating-sun"></div>
-
-    <div class="relative z-10 container mx-auto px-4 py-8 max-w-7xl">
+    <div class="relative z-10 max-w-6xl mx-auto px-6 md:px-8 lg:px-12 py-16 md:py-24">
         
         <!-- Header -->
-        <header class="mb-12 border-b-2 border-cyan pb-4 flex justify-between items-end">
+        <header class="mb-16 border-b-[4px] border-foreground pb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
             <div>
-                <h1 class="text-4xl md:text-6xl font-heading font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-sunset via-magenta to-cyan drop-shadow-[0_0_10px_rgba(255,0,255,0.6)]">
-                    LAB COMMAND
+                <p class="font-mono text-sm tracking-widest uppercase mb-4 text-mutedForeground">Security Manifesto</p>
+                <h1 class="font-display text-6xl md:text-8xl lg:text-9xl font-black tracking-tighter leading-none uppercase">
+                    Access<br>Control.
                 </h1>
-                <p class="text-cyan mt-2">> SYSTEM_STATUS: ONLINE</p>
             </div>
             
             <div id="auth-status">
-                <button id="login-btn" class="cyber-btn border-cyan text-cyan hover:bg-cyan hover:text-black">
-                    <span class="inline-block skew-x-12">> AUTHENTICATE</span>
+                <button id="login-btn" class="mono-btn font-mono text-sm uppercase tracking-widest font-bold">
+                    Authenticate →
                 </button>
             </div>
         </header>
 
         <!-- Main Content Grid -->
-        <main class="grid grid-cols-1 lg:grid-cols-3 gap-8" id="dashboard-content" style="display: none;">
+        <main class="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 hidden" id="dashboard-content">
             
-            <!-- Security Logs Terminal -->
-            <section class="lg:col-span-2">
-                <div class="terminal-card">
-                    <div class="title-bar flex gap-2 items-center px-4 py-2 bg-cyan/10 border-b border-cyan">
-                        <div class="h-3 w-3 rounded-full bg-magenta"></div>
-                        <div class="h-3 w-3 rounded-full bg-cyan"></div>
-                        <div class="h-3 w-3 rounded-full bg-sunset"></div>
-                        <span class="ml-4 font-heading text-sm text-cyan font-bold tracking-widest">SECURITY_LOGS.EXE</span>
-                    </div>
-                    <div class="p-6 bg-black/80 h-96 overflow-y-auto" id="logs-container">
+            <!-- Security Logs -->
+            <section class="lg:col-span-8">
+                <h2 class="font-display text-3xl font-bold tracking-tight mb-6 border-b border-borderLight pb-4">Audit Log</h2>
+                <div class="border border-foreground p-6 md:p-8 bg-background relative texture-grid">
+                    <div id="logs-container" class="space-y-4 max-h-[500px] overflow-y-auto">
                         <!-- Logs injected here via JS -->
-                        <div class="text-magenta animate-pulse">> FETCHING LOGS...</div>
+                        <div class="font-mono text-mutedForeground">Fetching logs...</div>
                     </div>
                 </div>
             </section>
 
             <!-- Device Management -->
-            <section class="lg:col-span-1">
-                <div class="glass-card">
-                    <h2 class="font-heading font-bold text-2xl text-cyan drop-shadow-[0_0_5px_rgba(0,255,255,0.8)] mb-6">
-                        ACTIVE DEVICES
+            <section class="lg:col-span-4">
+                <div class="bg-foreground text-background p-8 inverted-section">
+                    <h2 class="font-display text-3xl font-bold tracking-tight mb-6 border-b border-background pb-4">
+                        Active Devices
                     </h2>
-                    <div class="flex flex-col gap-4" id="devices-container">
+                    <div class="flex flex-col gap-6" id="devices-container">
                         <!-- Devices injected here -->
-                        <div class="border border-borderDefault p-4 bg-void/50">
-                            <p class="text-sm text-[#E0E0E0]/70">No active devices found.</p>
+                        <div class="border border-background p-4 bg-background/5">
+                            <p class="text-sm font-mono text-muted">No active devices.</p>
                         </div>
                     </div>
                 </div>
@@ -106,16 +87,22 @@
         </main>
         
         <!-- Login Modal (Hidden by default) -->
-        <div id="login-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-            <div class="glass-card w-full max-w-md border-t-2 border-t-magenta border-l-2 border-l-cyan">
-                <h2 class="font-heading text-2xl text-magenta mb-6">> ADMIN_LOGIN</h2>
-                <div class="flex flex-col gap-6">
-                    <input type="text" id="admin-user" placeholder="USERNAME" class="cyber-input" value="lab-pc-01">
-                    <input type="password" id="admin-pass" placeholder="PASSWORD" class="cyber-input" value="secure-lab-password-123">
-                    <button id="submit-login" class="cyber-btn border-magenta text-magenta hover:bg-magenta hover:text-white mt-4">
-                        <span class="inline-block skew-x-12">INITIALIZE UPLINK</span>
+        <div id="login-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-sm">
+            <div class="w-full max-w-lg bg-background border-[4px] border-foreground p-8 md:p-12 shadow-none relative texture-grid">
+                <h2 class="font-display text-4xl font-bold mb-8 tracking-tight">Authorization Required</h2>
+                <div class="flex flex-col gap-8">
+                    <div class="space-y-2">
+                        <label class="font-mono text-xs uppercase tracking-widest font-bold">Username</label>
+                        <input type="text" id="admin-user" placeholder="Enter identifier" class="mono-input" value="lab-pc-01">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="font-mono text-xs uppercase tracking-widest font-bold">Passphrase</label>
+                        <input type="password" id="admin-pass" placeholder="Enter secret" class="mono-input" value="secure-lab-password-123">
+                    </div>
+                    <button id="submit-login" class="mono-btn w-full mt-4 font-mono text-sm uppercase tracking-widest font-bold">
+                        Verify Identity →
                     </button>
-                    <p id="login-error" class="text-red-500 text-sm hidden"></p>
+                    <p id="login-error" class="text-foreground font-mono text-sm hidden font-bold underline decoration-2"></p>
                 </div>
             </div>
         </div>

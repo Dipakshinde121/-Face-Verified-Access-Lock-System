@@ -20,7 +20,7 @@ submitLoginBtn.addEventListener('click', async () => {
     const user = document.getElementById('admin-user').value;
     const pass = document.getElementById('admin-pass').value;
     
-    submitLoginBtn.innerHTML = '<span class="inline-block skew-x-12">AUTHENTICATING...</span>';
+    submitLoginBtn.innerText = 'Authenticating...';
     
     try {
         const formData = new URLSearchParams();
@@ -42,17 +42,17 @@ submitLoginBtn.addEventListener('click', async () => {
         
         // Success
         loginModal.classList.add('hidden');
-        authStatus.innerHTML = `<span class="text-green-500">> ACCESS GRANTED</span>`;
-        dashboardContent.style.display = 'grid';
+        authStatus.innerHTML = `<span class="font-mono text-sm uppercase tracking-widest font-bold underline decoration-2">Status: Authenticated</span>`;
+        dashboardContent.classList.remove('hidden');
         
         // Load Data
         fetchLogs();
         fetchDevices();
         
     } catch (e) {
-        loginError.textContent = '> ERROR: ' + e.message;
+        loginError.textContent = 'Error: ' + e.message;
         loginError.classList.remove('hidden');
-        submitLoginBtn.innerHTML = '<span class="inline-block skew-x-12">INITIALIZE UPLINK</span>';
+        submitLoginBtn.innerText = 'Verify Identity →';
     }
 });
 
@@ -67,29 +67,39 @@ async function fetchLogs() {
         if(data.logs && data.logs.length > 0) {
             data.logs.forEach(log => {
                 const isHighSeverity = log.severity === 'HIGH';
-                const color = isHighSeverity ? 'text-sunset' : 'text-cyan';
+                
+                // Minimalist Monochrome styling
+                const wrapperClass = isHighSeverity 
+                    ? 'border-l-[4px] border-foreground pl-4 mb-6 pb-2' 
+                    : 'border-b border-borderLight pb-4 mb-4';
+                
+                const eventClass = isHighSeverity
+                    ? 'font-display font-bold text-xl uppercase tracking-tighter'
+                    : 'font-body text-lg';
+                    
                 html += `
-                    <div class="mb-2 border-b border-[#2D1B4E] pb-2">
-                        <span class="text-magenta">[${new Date(log.timestamp).toLocaleTimeString()}]</span> 
-                        <span class="text-white">&lt;${log.roll_number}&gt;</span> 
-                        <span class="${color} ${isHighSeverity ? 'drop-shadow-[0_0_5px_#FF9900]' : ''}">
+                    <div class="${wrapperClass}">
+                        <div class="flex items-center gap-4 mb-1">
+                            <span class="font-mono text-xs tracking-widest text-mutedForeground">${new Date(log.timestamp).toLocaleTimeString()}</span> 
+                            <span class="font-mono text-xs font-bold uppercase underline">ID: ${log.roll_number}</span> 
+                        </div>
+                        <div class="${eventClass}">
                             ${log.event}
-                        </span>
+                        </div>
                     </div>
                 `;
             });
         } else {
-            html = '<div class="text-[#E0E0E0]/50">> NO LOGS FOUND</div>';
+            html = '<div class="font-mono text-mutedForeground tracking-widest uppercase">No logs recorded.</div>';
         }
         logsContainer.innerHTML = html;
         
     } catch (e) {
-        logsContainer.innerHTML = `<div class="text-red-500">> ERROR FETCHING LOGS</div>`;
+        logsContainer.innerHTML = `<div class="font-display font-bold text-xl border-l-[4px] border-foreground pl-4">Error fetching audit log.</div>`;
     }
 }
 
-// Mocking device fetch since the API doesn't have a GET /devices endpoint yet
-// We will simulate it visually for the aesthetic demo.
+// Mocking device fetch
 function fetchDevices() {
     const mockDevices = [
         { id: 'lab-pc-01', revoked: false },
@@ -101,22 +111,22 @@ function fetchDevices() {
     mockDevices.forEach(d => {
         if(d.revoked) {
             html += `
-                <div class="border border-red-500 p-4 bg-red-500/10 opacity-50 flex justify-between items-center">
+                <div class="border-[2px] border-background p-5 bg-background text-foreground flex justify-between items-center relative z-10">
                     <div>
-                        <p class="text-red-500 font-bold">${d.id}</p>
-                        <p class="text-xs text-red-500/70">STATUS: REVOKED</p>
+                        <p class="font-display font-bold text-xl line-through">${d.id}</p>
+                        <p class="font-mono text-xs tracking-widest uppercase mt-1">Status: Revoked</p>
                     </div>
                 </div>
             `;
         } else {
             html += `
-                <div class="border border-cyan p-4 bg-void/80 flex justify-between items-center shadow-[0_0_10px_rgba(0,255,255,0.1)]">
+                <div class="border border-background p-5 flex justify-between items-center relative z-10">
                     <div>
-                        <p class="text-cyan font-bold">${d.id}</p>
-                        <p class="text-xs text-[#E0E0E0]/70">STATUS: ONLINE</p>
+                        <p class="font-display font-bold text-xl">${d.id}</p>
+                        <p class="font-mono text-xs tracking-widest uppercase mt-1 opacity-70">Status: Online</p>
                     </div>
-                    <button class="cyber-btn border-sunset text-sunset hover:bg-sunset hover:text-black text-xs py-1 px-2" onclick="alert('Revocation API not yet implemented.')">
-                        <span class="inline-block skew-x-12">REVOKE</span>
+                    <button class="mono-btn-inverted font-mono text-xs uppercase tracking-widest font-bold" onclick="alert('Revocation API not yet implemented.')">
+                        Revoke
                     </button>
                 </div>
             `;
