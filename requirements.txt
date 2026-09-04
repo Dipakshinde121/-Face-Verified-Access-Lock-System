@@ -10,3 +10,4 @@ qrcode
 PyJWT
 cryptography
 keyring
+pystray
