@@ -1,4 +1,6 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException, Security, status
+from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -16,10 +18,19 @@ from server.database import (
 import uuid
 import secrets
 
-app = FastAPI(title="Lab Access Control Central API (JWT Protected)")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+app = FastAPI(title="Lab Access Control Central API (JWT Protected)", lifespan=lifespan)
 
 # Mount the Vaporwave Dashboard
 app.mount("/dashboard", StaticFiles(directory="frontend", html=True), name="dashboard")
+
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse(url="/dashboard")
 
 # --- JWT OAUTH2 SECURITY CONFIGURATION ---
 JWT_SECRET = "highly-complex-production-signature-key-2026"
@@ -62,9 +73,6 @@ def verify_jwt_token(token: str = Depends(oauth2_scheme)):
 
 # --- ENDPOINTS ---
 
-@app.on_event("startup")
-def startup_event():
-    init_db()
 
 @app.post("/device/register", summary="Dynamically Register a New Lab PC")
 def register_device():
