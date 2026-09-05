@@ -11,7 +11,8 @@ EVENT_DESCRIPTIONS = {
     "LOGOUT": "User ended session manually",
     "LOGOUT_OR_LOCK": "Session terminated (manual or auto-lock)",
     "REGISTRATION_SUCCESS": "New student registered biometrics",
-    "PERIODIC_CHECK_SUCCESS": "Continuous verification passed",
+    "PERIODIC_CHECK_SUCCESS": "Continuous verification passed (High Conf)",
+    "PERIODIC_CHECK_MATCH_LOW_CONFIDENCE": "Continuous verification passed (Medium Conf - Borderline)",
     "LOCK_NO_FACE_TIMEOUT": "User absent - Grace period expired (Auto-Locked)",
     "LOCK_FACE_MISMATCH": "Unrecognized face detected (Impersonation attempt - Auto-Locked)",
     "PERIODIC_CHECK_ERROR_CAMERA": "Failed to access webcam during check",
@@ -20,7 +21,11 @@ EVENT_DESCRIPTIONS = {
     "POLICY_RESUMED": "User manually resumed security monitoring",
     "AUTO_RESUME_FAILSAFE": "Max pause duration exceeded - Auto-resumed monitoring",
     "LOGIN_DENIED_LIVENESS_FAIL": "Login denied - Failed liveness check (Spoofing attempt)",
-    "LOGIN_DENIED_INVALID_TOTP": "Login denied - Invalid MFA TOTP code"
+    "LOGIN_DENIED_INVALID_TOTP": "Login denied - Invalid MFA TOTP code",
+    "LOGIN_FACE_MATCH_HIGH_CONF": "Login face verified (High Conf)",
+    "LOGIN_FACE_MATCH_MED_CONF": "Login face verified (Medium Conf - Borderline)",
+    "LOGIN_DENIED_FACE_MISMATCH": "Login denied - Unrecognized face",
+    "LOGIN_DENIED_NO_FACE": "Login denied - No face detected"
 }
 
 def print_table(headers, rows):
@@ -51,11 +56,59 @@ def print_table(headers, rows):
         
     print(sep)
 
+def verify_log_integrity(conn):
+    import hashlib
+    print("\n[SECURITY AUDIT] Initiating Tamper-Evident Hash Chain Verification...")
+    GENESIS_HASH = "0000000000000000000000000000000000000000000000000000000000000000"
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, timestamp, roll_number, event, severity, entry_hash FROM logs ORDER BY id ASC")
+        rows = cursor.fetchall()
+        
+        if not rows:
+            print("[Info] The logs database is currently empty.")
+            return
+
+        prev_hash = GENESIS_HASH
+        for row in rows:
+            log_id, timestamp, roll_number, event, severity, stored_hash = row
+            
+            # Recompute what the hash SHOULD be
+            payload = f"{timestamp}|{roll_number}|{event}|{severity}|{prev_hash}"
+            expected_hash = hashlib.sha256(payload.encode('utf-8')).hexdigest()
+            
+            if expected_hash != stored_hash:
+                print("\n" + "="*60)
+                print("🚨 CRITICAL SECURITY ALERT: LOG TAMPERING DETECTED! 🚨")
+                print("="*60)
+                print(f"Chain broken at Log ID: {log_id}")
+                print(f"Timestamp of Tampered Entry: {timestamp}")
+                print(f"Event: {event}")
+                print(f"\nExpected Hash : {expected_hash}")
+                print(f"Stored Hash   : {stored_hash}")
+                print("="*60)
+                print("[!] All subsequent logs in this chain are mathematically invalidated.")
+                return
+                
+            prev_hash = expected_hash
+            
+        print(f"\n✅ SUCCESS: Cryptographic Chain Verified!")
+        print(f"Analyzed {len(rows)} sequential entries.")
+        print("No tampering detected. The audit trail is fully intact.")
+        
+    except sqlite3.OperationalError as e:
+        if "no such column: entry_hash" in str(e).lower():
+            print("\n[Error] The 'entry_hash' column does not exist. Run login.py to trigger database migration.")
+        else:
+            print(f"[Error] Database failure: {e}")
+
 def main():
     parser = argparse.ArgumentParser(description="Security Monitoring Dashboard - Log Viewer")
     parser.add_argument("--roll", type=str, help="Filter by Roll Number")
     parser.add_argument("--severity", type=str, choices=['INFO', 'LOW', 'MEDIUM', 'HIGH'], help="Filter by Threat Severity")
     parser.add_argument("--limit", type=int, default=20, help="Number of latest logs to display")
+    parser.add_argument("--verify-integrity", action="store_true", help="Verify the cryptographic hash chain of the audit logs")
     
     args = parser.parse_args()
     
@@ -65,6 +118,10 @@ def main():
 
     conn = sqlite3.connect(DB_PATH)
     try:
+        if args.verify_integrity:
+            verify_log_integrity(conn)
+            return
+            
         cursor = conn.cursor()
         
         query = "SELECT timestamp, roll_number, event, severity FROM logs"
@@ -100,18 +157,27 @@ def main():
 
         # Format rows
         formatted_rows = []
+        import re
+        
         for timestamp, roll_number, event_raw, severity in raw_logs:
             # Clean up timestamp for display (e.g. 2026-08-21 00:05:00)
             display_time = timestamp.replace("T", " ")[:19]
             
+            # Extract confidence score if present
+            conf_match = re.search(r'\(Conf:\s*([\d.]+)\)', event_raw)
+            base_event = re.sub(r'\s*\(Conf:\s*[\d.]+\)', '', event_raw)
+            
             # Map raw event to English description
-            desc = EVENT_DESCRIPTIONS.get(event_raw)
+            desc = EVENT_DESCRIPTIONS.get(base_event)
             if not desc:
                 # Handle dynamic strings
-                if "PERIODIC_CHECK_NO_FACE" in event_raw:
+                if "PERIODIC_CHECK_NO_FACE" in base_event:
                     desc = "User absent from camera frame"
                 else:
-                    desc = event_raw
+                    desc = base_event
+                    
+            if conf_match:
+                desc += f" (Score: {conf_match.group(1)})"
                     
             formatted_rows.append((display_time, roll_number, severity, event_raw, desc))
             

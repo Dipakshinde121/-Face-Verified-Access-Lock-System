@@ -131,28 +131,37 @@ class ContinuousVerificationThread(threading.Thread):
             else:
                 # 3. Face(s) detected, extract encodings
                 encodings = face_recognition.face_encodings(rgb_frame, known_face_locations=face_locations)
-                match_found = False
                 
-                for face_encoding in encodings:
-                    matches = face_recognition.compare_faces([self.session_state.face_encoding], face_encoding, tolerance=self.tolerance)
-                    if matches[0]:
-                        match_found = True
-                        break
+                best_confidence = 0.0
+                
+                for face_encoding_live in encodings:
+                    dist = face_recognition.face_distance([self.session_state.face_encoding], face_encoding_live)[0]
+                    conf = 1.0 - dist
+                    if conf > best_confidence:
+                        best_confidence = conf
 
-                # --- THREAT MODEL C: Face Matches (Authorized User) ---
-                if match_found:
+                # --- CONFIDENCE RISK BANDING ---
+                # HIGH CONFIDENCE (> 0.60): Normal Accept
+                if best_confidence > 0.60:
                     with self.state_lock:
                         self.missed_checks = 0 # Reset grace period
-                    self._log_and_check("PERIODIC_CHECK_SUCCESS", severity="INFO")
+                    self._log_and_check(f"PERIODIC_CHECK_SUCCESS (Conf: {best_confidence:.2f})", severity="INFO")
                     
-                # --- THREAT MODEL B: Different Face (Impersonation Attempt) ---
+                # MEDIUM CONFIDENCE (0.50 - 0.60): Accept but flag
+                elif best_confidence >= 0.50:
+                    with self.state_lock:
+                        self.missed_checks = 0 # Reset grace period
+                    self._log_and_check(f"PERIODIC_CHECK_MATCH_LOW_CONFIDENCE (Conf: {best_confidence:.2f})", severity="MEDIUM")
+                    print(f"\n[Warning] Borderline face match detected during periodic check (Conf: {best_confidence:.2f}).")
+                    
+                # --- THREAT MODEL B: LOW CONFIDENCE (< 0.50): Impersonation Attempt ---
                 else:
-                    print("\n\n[SECURITY ALERT] Unrecognized face detected at terminal! Locking immediately.")
-                    self._log_and_check("LOCK_FACE_MISMATCH", severity="HIGH")
+                    print(f"\n\n[SECURITY ALERT] Unrecognized face detected at terminal! (Conf: {best_confidence:.2f}). Locking immediately.")
+                    self._log_and_check(f"LOCK_FACE_MISMATCH (Conf: {best_confidence:.2f})", severity="HIGH")
                     
                     # DISPATCH REAL-TIME ALERT (Fail-Safe: will not block if network is down)
                     import alerting
-                    alerting.trigger_high_severity_alert(self.session_state.roll_number)
+                    alerting.trigger_high_severity_alert(self.session_state.roll_number, f"Unrecognized Face (Conf: {best_confidence:.2f})")
                     
                     self.trigger_lock()
 

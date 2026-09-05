@@ -1,10 +1,14 @@
 import sqlite3
 import os
+import hashlib
 from datetime import datetime
 
 # Centralized server database path
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "central_access_control.db")
+
+# The fixed cryptographic anchor for the very first log entry
+GENESIS_HASH = "0000000000000000000000000000000000000000000000000000000000000000"
 
 def get_db_connection(db_path=DB_PATH):
     conn = sqlite3.connect(db_path)
@@ -43,9 +47,17 @@ def init_db(db_path=DB_PATH):
             event TEXT NOT NULL,
             timestamp TEXT NOT NULL,
             severity TEXT DEFAULT 'INFO',
+            entry_hash TEXT,
             FOREIGN KEY (roll_number) REFERENCES students (roll_number)
         );
         """)
+        
+        # Perform dynamic migration if the table exists but lacks the entry_hash column
+        try:
+            cursor.execute("ALTER TABLE logs ADD COLUMN entry_hash TEXT;")
+        except sqlite3.OperationalError:
+            pass # Column already exists
+            
         conn.commit()
     finally:
         conn.close()
@@ -133,9 +145,20 @@ def log_event_server(roll_number: str, event: str, severity: str = "INFO", db_pa
     conn = get_db_connection(db_path)
     try:
         cursor = conn.cursor()
+        
+        # 1. Fetch the previous entry's hash to chain them together
+        cursor.execute("SELECT entry_hash FROM logs ORDER BY id DESC LIMIT 1")
+        row = cursor.fetchone()
+        prev_hash = row[0] if (row and row[0]) else GENESIS_HASH
+        
+        # 2. Compute the new cryptographic hash over the payload + previous hash
+        payload = f"{timestamp}|{roll_number}|{event}|{severity}|{prev_hash}"
+        entry_hash = hashlib.sha256(payload.encode('utf-8')).hexdigest()
+        
+        # 3. Store the log entry securely
         cursor.execute(
-            "INSERT INTO logs (roll_number, event, timestamp, severity) VALUES (?, ?, ?, ?)",
-            (roll_number, event, timestamp, severity)
+            "INSERT INTO logs (roll_number, event, timestamp, severity, entry_hash) VALUES (?, ?, ?, ?, ?)",
+            (roll_number, event, timestamp, severity, entry_hash)
         )
         conn.commit()
         return True

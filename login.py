@@ -62,6 +62,56 @@ def main():
 
             name = student_info['name']
             
+            # --- FACE MATCHING CHALLENGE ---
+            print(f"\n[SECURITY] Initiating Face Verification for {name}...")
+            import face_recognition
+            import cv2
+            
+            cap = cv2.VideoCapture(0)
+            if not cap.isOpened():
+                print("[Error] Camera failure. Cannot verify face.")
+                continue
+                
+            for _ in range(5): cap.read() # Let camera adjust
+            ret, frame = cap.read()
+            cap.release()
+            
+            if not ret or frame is None:
+                print("[Error] Camera frame read failure.")
+                continue
+                
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            face_locations = face_recognition.face_locations(rgb_frame)
+            
+            if not face_locations:
+                print("\n[SECURITY ALERT] No face detected at terminal!")
+                log_event(roll_input, "LOGIN_DENIED_NO_FACE", severity="MEDIUM")
+                failed_attempts[roll_input] = failed_attempts.get(roll_input, 0) + 1
+                continue
+                
+            encodings = face_recognition.face_encodings(rgb_frame, known_face_locations=face_locations)
+            best_confidence = 0.0
+            
+            for face_encoding_live in encodings:
+                dist = face_recognition.face_distance([face_encoding], face_encoding_live)[0]
+                conf = 1.0 - dist
+                if conf > best_confidence:
+                    best_confidence = conf
+                    
+            if best_confidence > 0.60:
+                print(f"[Success] Face Match HIGH CONFIDENCE ({best_confidence:.2f})")
+                log_event(roll_input, f"LOGIN_FACE_MATCH_HIGH_CONF (Conf: {best_confidence:.2f})", severity="INFO")
+            elif best_confidence >= 0.50:
+                print(f"\n[Warning] Face Match MEDIUM CONFIDENCE ({best_confidence:.2f})")
+                log_event(roll_input, f"LOGIN_FACE_MATCH_MED_CONF (Conf: {best_confidence:.2f})", severity="MEDIUM")
+            else:
+                print(f"\n[SECURITY ALERT] Face Mismatch! (Conf: {best_confidence:.2f}). Access Denied.")
+                log_event(roll_input, f"LOGIN_DENIED_FACE_MISMATCH (Conf: {best_confidence:.2f})", severity="HIGH")
+                failed_attempts[roll_input] = failed_attempts.get(roll_input, 0) + 1
+                import alerting
+                alerting.trigger_high_severity_alert(roll_input, f"Failed Face Match (Conf: {best_confidence:.2f})")
+                continue
+            
             # --- MFA CHALLENGE (TOTP) ---
             print("\n[SECURITY] Initiating Multi-Factor Authentication...")
             import pyotp
