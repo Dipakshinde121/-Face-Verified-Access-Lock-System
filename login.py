@@ -89,6 +89,12 @@ def main():
                 failed_attempts[roll_input] = failed_attempts.get(roll_input, 0) + 1
                 continue
                 
+            if len(face_locations) > 1:
+                print(f"\n[SECURITY ALERT] Multiple faces detected! ({len(face_locations)} faces). Possible piggybacking attempt.")
+                log_event(roll_input, "LOGIN_DENIED_MULTIPLE_FACES", severity="HIGH")
+                failed_attempts[roll_input] = failed_attempts.get(roll_input, 0) + 1
+                continue
+                
             encodings = face_recognition.face_encodings(rgb_frame, known_face_locations=face_locations)
             best_confidence = 0.0
             

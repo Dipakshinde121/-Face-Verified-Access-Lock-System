@@ -25,7 +25,9 @@ EVENT_DESCRIPTIONS = {
     "LOGIN_FACE_MATCH_HIGH_CONF": "Login face verified (High Conf)",
     "LOGIN_FACE_MATCH_MED_CONF": "Login face verified (Medium Conf - Borderline)",
     "LOGIN_DENIED_FACE_MISMATCH": "Login denied - Unrecognized face",
-    "LOGIN_DENIED_NO_FACE": "Login denied - No face detected"
+    "LOGIN_DENIED_NO_FACE": "Login denied - No face detected",
+    "LOGIN_DENIED_MULTIPLE_FACES": "Login denied - Multiple faces detected (Piggybacking attempt)",
+    "LOCK_MULTIPLE_FACES": "Piggybacking detected - Multiple faces in frame (Auto-Locked)"
 }
 
 def print_table(headers, rows):

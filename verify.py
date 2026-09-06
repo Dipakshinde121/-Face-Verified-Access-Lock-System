@@ -128,6 +128,18 @@ class ContinuousVerificationThread(threading.Thread):
                     print(f"\n\n[SECURITY] Grace period expired. No face detected for {self.check_interval * self.max_missed_checks}s. Locking session.")
                     self._log_and_check("LOCK_NO_FACE_TIMEOUT", severity="LOW")
                     self.trigger_lock()
+                    
+            # --- THREAT MODEL D: Multiple Faces (Piggybacking / Shoulder Surfing) ---
+            elif len(face_locations) > 1:
+                print(f"\n\n[SECURITY ALERT] Multiple faces detected! ({len(face_locations)} faces). Possible piggybacking attempt. Locking immediately.")
+                self._log_and_check("LOCK_MULTIPLE_FACES", severity="HIGH")
+                
+                # Dispatch real-time alert
+                import alerting
+                alerting.trigger_high_severity_alert(self.session_state.roll_number, f"Piggybacking Attempt ({len(face_locations)} faces detected)")
+                
+                self.trigger_lock()
+                
             else:
                 # 3. Face(s) detected, extract encodings
                 encodings = face_recognition.face_encodings(rgb_frame, known_face_locations=face_locations)
