@@ -106,13 +106,13 @@ def main():
                     
             if best_confidence > 0.60:
                 print(f"[Success] Face Match HIGH CONFIDENCE ({best_confidence:.2f})")
-                log_event(roll_input, f"LOGIN_FACE_MATCH_HIGH_CONF (Conf: {best_confidence:.2f})", severity="INFO")
+                log_event(roll_input, "MATCH", severity="LOW", confidence_score=best_confidence)
             elif best_confidence >= 0.50:
                 print(f"\n[Warning] Face Match MEDIUM CONFIDENCE ({best_confidence:.2f})")
-                log_event(roll_input, f"LOGIN_FACE_MATCH_MED_CONF (Conf: {best_confidence:.2f})", severity="MEDIUM")
+                log_event(roll_input, "MATCH_LOW_CONFIDENCE", severity="MEDIUM", confidence_score=best_confidence)
             else:
                 print(f"\n[SECURITY ALERT] Face Mismatch! (Conf: {best_confidence:.2f}). Access Denied.")
-                log_event(roll_input, f"LOGIN_DENIED_FACE_MISMATCH (Conf: {best_confidence:.2f})", severity="HIGH")
+                log_event(roll_input, "LOGIN_DENIED_FACE_MISMATCH", severity="HIGH", confidence_score=best_confidence)
                 failed_attempts[roll_input] = failed_attempts.get(roll_input, 0) + 1
                 import alerting
                 alerting.trigger_high_severity_alert(roll_input, f"Failed Face Match (Conf: {best_confidence:.2f})")
@@ -135,7 +135,7 @@ def main():
             # valid_window=1 allows for 1 interval (30s) of clock drift for usability vs replay attack tradeoff
             if not totp.verify(user_code, valid_window=1):
                 print("\n[SECURITY ALERT] Invalid MFA Code! Access Denied.")
-                log_event(roll_input, "LOGIN_DENIED_INVALID_TOTP", severity="HIGH")
+                log_event(roll_input, "LOGIN_DENIED_INVALID_TOTP", severity="MEDIUM")
                 failed_attempts[roll_input] = failed_attempts.get(roll_input, 0) + 1
                 import alerting
                 alerting.trigger_high_severity_alert(roll_input, "Failed MFA Code (Invalid TOTP)")
@@ -163,7 +163,7 @@ def main():
             
             # 4 & 5: Setup Session and Log Event
             active_session = SessionState(roll_input, name, face_encoding)
-            log_event(roll_input, "LOGIN")
+            log_event(roll_input, "LOGIN", severity="LOW")
             
             print(f"\n[Success] Welcome back, {name}!")
             print(active_session)

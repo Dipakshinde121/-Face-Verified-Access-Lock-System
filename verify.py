@@ -4,36 +4,21 @@ import cv2
 import face_recognition
 import _thread
 import os
-import platform
-import json
 from src.api_client import log_event
-
-def load_config():
-    import os
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(base_dir, "config.json")
-    try:
-        with open(config_path, "r") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {
-            "verification_interval": 30,
-            "grace_period_missed_checks": 2,
-            "face_match_tolerance": 0.6,
-            "max_pause_duration_seconds": 60
-        }
+from lock import lock_workstation
+from config import load_config
 
 class ContinuousVerificationThread(threading.Thread):
     def __init__(self, session_state):
         super().__init__()
         self.session_state = session_state
         
-        # Load configurable policies
+        # Load configurable policies from config module (TRD §6)
         self.config = load_config()
         self.check_interval = self.config.get("verification_interval", 30)
         self.max_missed_checks = self.config.get("grace_period_missed_checks", 2)
         self.tolerance = self.config.get("face_match_tolerance", 0.6)
-        self.max_pause_duration = self.config.get("max_pause_duration_seconds", 60)
+        self.max_pause_duration = self.config.get("max_pause_duration_seconds", 300)
         
         self.daemon = True
         self.running = True
@@ -50,12 +35,12 @@ class ContinuousVerificationThread(threading.Thread):
         self.running = False
 
     def pause_monitoring(self):
-        """Auditable policy override to temporarily pause webcam checks."""
+        """Auditable policy override to temporarily pause webcam checks (Schema §4)."""
         with self.state_lock:
             if not self.is_paused:
                 self.is_paused = True
                 self.pause_start_time = time.time()
-                self._log_and_check("POLICY_OVERRIDE", severity="MEDIUM")
+                self._log_and_check("POLICY_OVERRIDE_PAUSE", severity="MEDIUM")
 
     def resume_monitoring(self):
         """Manually resumes monitoring."""
@@ -66,9 +51,14 @@ class ContinuousVerificationThread(threading.Thread):
                 self.missed_checks = 0 # Reset grace period when resuming
                 self._log_and_check("POLICY_RESUMED", severity="INFO")
 
-    def _log_and_check(self, event, severity="INFO"):
+    def _log_and_check(self, event, severity="INFO", confidence_score=None):
         """Wrapper for API logging that implements a strict FAIL-CLOSED policy."""
-        success = log_event(self.session_state.roll_number, event, severity=severity)
+        success = log_event(
+            self.session_state.roll_number, 
+            event, 
+            severity=severity, 
+            confidence_score=confidence_score
+        )
         if not success:
             print("\n[SECURITY] Central API Unreachable! Triggering Fail-Closed lockdown.")
             self.trigger_lock()
@@ -152,24 +142,24 @@ class ContinuousVerificationThread(threading.Thread):
                     if conf > best_confidence:
                         best_confidence = conf
 
-                # --- CONFIDENCE RISK BANDING ---
+                # --- CONFIDENCE RISK BANDING (TRD §3.3 & Schema §4) ---
                 # HIGH CONFIDENCE (> 0.60): Normal Accept
                 if best_confidence > 0.60:
                     with self.state_lock:
                         self.missed_checks = 0 # Reset grace period
-                    self._log_and_check(f"PERIODIC_CHECK_SUCCESS (Conf: {best_confidence:.2f})", severity="INFO")
+                    self._log_and_check("MATCH", severity="LOW", confidence_score=best_confidence)
                     
                 # MEDIUM CONFIDENCE (0.50 - 0.60): Accept but flag
                 elif best_confidence >= 0.50:
                     with self.state_lock:
                         self.missed_checks = 0 # Reset grace period
-                    self._log_and_check(f"PERIODIC_CHECK_MATCH_LOW_CONFIDENCE (Conf: {best_confidence:.2f})", severity="MEDIUM")
+                    self._log_and_check("MATCH_LOW_CONFIDENCE", severity="MEDIUM", confidence_score=best_confidence)
                     print(f"\n[Warning] Borderline face match detected during periodic check (Conf: {best_confidence:.2f}).")
                     
                 # --- THREAT MODEL B: LOW CONFIDENCE (< 0.50): Impersonation Attempt ---
                 else:
                     print(f"\n\n[SECURITY ALERT] Unrecognized face detected at terminal! (Conf: {best_confidence:.2f}). Locking immediately.")
-                    self._log_and_check(f"LOCK_FACE_MISMATCH (Conf: {best_confidence:.2f})", severity="HIGH")
+                    self._log_and_check("LOCK_FACE_MISMATCH", severity="HIGH", confidence_score=best_confidence)
                     
                     # DISPATCH REAL-TIME ALERT (Fail-Safe: will not block if network is down)
                     import alerting
@@ -187,27 +177,9 @@ class ContinuousVerificationThread(threading.Thread):
                 break
             time.sleep(1)
 
-    def _lock_os_workstation(self):
-        """Executes the OS-level workstation lock."""
-        sys_os = platform.system()
-        try:
-            if sys_os == "Windows":
-                import ctypes
-                ctypes.windll.user32.LockWorkStation()
-            elif sys_os == "Linux":
-                exit_code = os.system("dbus-send --type=method_call --dest=org.gnome.ScreenSaver /org/gnome/ScreenSaver org.gnome.ScreenSaver.Lock > /dev/null 2>&1")
-                if exit_code != 0:
-                    exit_code = os.system("loginctl lock-session > /dev/null 2>&1")
-                if exit_code != 0:
-                    os.system("xdg-screensaver lock > /dev/null 2>&1")
-            elif sys_os == "Darwin":
-                os.system("pmset displaysleepnow")
-        except Exception as e:
-            print(f"\n[Warning] Failed to execute OS lock command: {e}")
-
     def trigger_lock(self):
         """Forces the OS to lock and the main application to exit, securing the terminal."""
         self.running = False
-        self._lock_os_workstation()
+        lock_workstation()
         # Interrupts the main thread cleanly
         _thread.interrupt_main()

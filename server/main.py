@@ -7,10 +7,10 @@ from pydantic import BaseModel
 import base64
 import jwt
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 
 from server.database import (
-    init_db, register_device_server, get_device_server,
+    init_db, register_device_server, get_device_server, update_device_last_seen,
     add_student_server, get_student_server, 
     log_event_server, get_logs_server
 )
@@ -75,20 +75,21 @@ def verify_jwt_token(token: str = Depends(oauth2_scheme)):
 
 
 @app.post("/device/register", summary="Dynamically Register a New Lab PC")
-def register_device():
+def register_device(device_label: Optional[str] = None):
     """
-    Registers a new Lab PC. Returns a unique device_id and device_secret.
+    Registers a new Lab PC. Returns a unique device_id, device_label, and device_secret.
     In a real enterprise, this endpoint would itself be protected by an admin token,
     or devices would be pre-provisioned. For this project, we allow dynamic provisioning.
     """
     device_id = f"lab-pc-{uuid.uuid4().hex[:8]}"
     device_secret = secrets.token_urlsafe(32)
+    label = device_label or f"Lab-PC-{device_id[-4:].upper()}"
     
-    success = register_device_server(device_id, device_secret)
+    success = register_device_server(device_id, device_secret, device_label=label)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to register device")
         
-    return {"device_id": device_id, "device_secret": device_secret}
+    return {"device_id": device_id, "device_label": label, "device_secret": device_secret}
 
 @app.post("/token", summary="Issue Per-Device JWT Access Token")
 def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
@@ -105,8 +106,11 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
             headers={"WWW-Authenticate": "Bearer"},
         )
         
-    if device.get("is_revoked"):
+    if device.get("is_revoked") or device.get("revoked"):
         raise HTTPException(status_code=403, detail="Device has been revoked.")
+    
+    # Update last_seen timestamp per TRD §4 / Schema Doc §2
+    update_device_last_seen(device_id)
     
     # Issue the temporary JWT with the device_id claim
     access_token = create_access_token(data={"device_id": device_id})
@@ -121,9 +125,11 @@ class RegisterRequest(BaseModel):
     totp_secret_b64: str    # Base64 encoded encrypted bytes
 
 class LogEventRequest(BaseModel):
-    roll_number: str
+    roll_number: Optional[str] = None
     event: str
     severity: str = "INFO"
+    confidence_score: Optional[float] = None
+    device_id: Optional[str] = None
 
 @app.post("/register", dependencies=[Depends(verify_jwt_token)])
 def register_student(req: RegisterRequest):
@@ -153,9 +159,16 @@ def get_student(roll_number: str):
         "registered_date": data["registered_date"]
     }
 
-@app.post("/log", dependencies=[Depends(verify_jwt_token)])
-def log_event(req: LogEventRequest):
-    success = log_event_server(req.roll_number, req.event, req.severity)
+@app.post("/log")
+def log_event(req: LogEventRequest, authenticated_device: str = Depends(verify_jwt_token)):
+    dev_id = req.device_id or authenticated_device
+    success = log_event_server(
+        roll_number=req.roll_number,
+        event=req.event,
+        severity=req.severity,
+        confidence_score=req.confidence_score,
+        device_id=dev_id
+    )
     if not success:
         raise HTTPException(status_code=500, detail="Failed to write log")
     return {"message": "Event logged"}

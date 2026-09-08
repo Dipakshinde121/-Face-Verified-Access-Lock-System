@@ -150,15 +150,20 @@ def get_student_by_roll(roll_number):
         return {"name": data["name"], "registered_date": data["registered_date"]}
     return None
 
-def log_event(roll_number, event, severity="INFO"):
+def log_event(roll_number, event, severity="INFO", confidence_score=None, device_id=None):
     """
-    Sends audit log to the central API.
+    Sends audit log to the central API with optional confidence score and device ID.
     """
     payload = {
         "roll_number": roll_number,
         "event": event,
         "severity": severity
     }
+    if confidence_score is not None:
+        payload["confidence_score"] = float(confidence_score)
+    if device_id is not None:
+        payload["device_id"] = device_id
+
     try:
         headers = _get_auth_header()
         response = _refresh_token_if_needed(requests.post, f"{BASE_URL}/log", json=payload, headers=headers, timeout=5)

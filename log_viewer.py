@@ -3,31 +3,36 @@ import argparse
 import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "access_control.db")
+# Check central server database path first, then fallback to local
+SERVER_DB_PATH = os.path.join(BASE_DIR, "server", "central_access_control.db")
+LOCAL_DB_PATH = os.path.join(BASE_DIR, "access_control.db")
+DB_PATH = SERVER_DB_PATH if os.path.exists(SERVER_DB_PATH) else LOCAL_DB_PATH
 
-# Dictionary mapping raw technical events to Plain-English descriptions for the dashboard
+# Dictionary mapping raw technical events to Plain-English descriptions (Schema Doc §4)
 EVENT_DESCRIPTIONS = {
-    "LOGIN": "User initiated session",
+    "LOGIN": "Successful 3-factor login",
     "LOGOUT": "User ended session manually",
     "LOGOUT_OR_LOCK": "Session terminated (manual or auto-lock)",
     "REGISTRATION_SUCCESS": "New student registered biometrics",
-    "PERIODIC_CHECK_SUCCESS": "Continuous verification passed (High Conf)",
-    "PERIODIC_CHECK_MATCH_LOW_CONFIDENCE": "Continuous verification passed (Medium Conf - Borderline)",
+    "MATCH": "Continuous verification passed (High Conf)",
+    "MATCH_LOW_CONFIDENCE": "Continuous verification passed (Medium Conf - Borderline)",
     "LOCK_NO_FACE_TIMEOUT": "User absent - Grace period expired (Auto-Locked)",
     "LOCK_FACE_MISMATCH": "Unrecognized face detected (Impersonation attempt - Auto-Locked)",
     "PERIODIC_CHECK_ERROR_CAMERA": "Failed to access webcam during check",
     "PERIODIC_CHECK_ERROR_FRAME": "Failed to read frame from webcam",
-    "POLICY_OVERRIDE": "User explicitly paused security monitoring",
-    "POLICY_RESUMED": "User manually resumed security monitoring",
+    "POLICY_OVERRIDE_PAUSE": "Admin paused monitoring (auto-expires)",
+    "POLICY_OVERRIDE": "Admin paused monitoring (auto-expires)",
+    "POLICY_RESUMED": "Security monitoring resumed",
     "AUTO_RESUME_FAILSAFE": "Max pause duration exceeded - Auto-resumed monitoring",
-    "LOGIN_DENIED_LIVENESS_FAIL": "Login denied - Failed liveness check (Spoofing attempt)",
+    "LOGIN_DENIED_LIVENESS_FAIL": "Login denied - Failed liveness challenge (Spoofing attempt)",
     "LOGIN_DENIED_INVALID_TOTP": "Login denied - Invalid MFA TOTP code",
-    "LOGIN_FACE_MATCH_HIGH_CONF": "Login face verified (High Conf)",
-    "LOGIN_FACE_MATCH_MED_CONF": "Login face verified (Medium Conf - Borderline)",
     "LOGIN_DENIED_FACE_MISMATCH": "Login denied - Unrecognized face",
     "LOGIN_DENIED_NO_FACE": "Login denied - No face detected",
     "LOGIN_DENIED_MULTIPLE_FACES": "Login denied - Multiple faces detected (Piggybacking attempt)",
-    "LOCK_MULTIPLE_FACES": "Piggybacking detected - Multiple faces in frame (Auto-Locked)"
+    "LOCK_MULTIPLE_FACES": "Piggybacking detected - Multiple faces in frame (Auto-Locked)",
+    "API_AUTH_FAILED_INVALID_TOKEN": "Rejected API call - Expired/tampered JWT",
+    "API_AUTH_FAILED_REVOKED_DEVICE": "Rejected API call - Revoked Lab PC",
+    "TAMPER_DETECTED": "Corrupted/tampered encrypted data detected on decrypt"
 }
 
 def print_table(headers, rows):
@@ -65,7 +70,20 @@ def verify_log_integrity(conn):
     
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, timestamp, roll_number, event, severity, entry_hash FROM logs ORDER BY id ASC")
+        cursor.execute("PRAGMA table_info(logs)")
+        cols = [c[1] for c in cursor.fetchall()]
+        has_prev_col = "previous_hash" in cols
+        has_device_col = "device_id" in cols
+        has_conf_col = "confidence_score" in cols
+        
+        dev_select = "device_id" if has_device_col else "NULL"
+        conf_select = "confidence_score" if has_conf_col else "NULL"
+        prev_select = "previous_hash" if has_prev_col else "NULL"
+        
+        cursor.execute(f"""
+            SELECT id, timestamp, roll_number, {dev_select}, event, severity, {conf_select}, entry_hash, {prev_select}
+            FROM logs ORDER BY id ASC
+        """)
         rows = cursor.fetchall()
         
         if not rows:
@@ -74,28 +92,57 @@ def verify_log_integrity(conn):
 
         prev_hash = GENESIS_HASH
         for row in rows:
-            log_id, timestamp, roll_number, event, severity, stored_hash = row
+            log_id, timestamp, roll_number, device_id, event, severity, confidence_score, stored_hash, stored_prev_hash = row
             
-            # Recompute what the hash SHOULD be
-            payload = f"{timestamp}|{roll_number}|{event}|{severity}|{prev_hash}"
-            expected_hash = hashlib.sha256(payload.encode('utf-8')).hexdigest()
+            # 1. Verify previous_hash link if column is stored
+            if stored_prev_hash and stored_prev_hash != prev_hash:
+                print("\n" + "="*60)
+                print("[!] CRITICAL SECURITY ALERT: HASH CHAIN LINK BROKEN!")
+                print("="*60)
+                print(f"Broken at Log ID: {log_id}")
+                print(f"Timestamp: {timestamp} | Event: {event}")
+                print(f"Expected Previous Hash: {prev_hash}")
+                print(f"Stored Previous Hash  : {stored_prev_hash}")
+                print("="*60)
+                return
+
+            if not stored_hash:
+                print("\n" + "="*60)
+                print("[!] INTEGRITY CHECK: UNHASHED LEGACY LOG ENTRY DETECTED")
+                print("="*60)
+                print(f"Log ID: {log_id} | Timestamp: {timestamp} | Event: {event}")
+                print("Explanation: This entry was recorded before hash-chaining was enabled (Day 19).")
+                print("Per Schema Document Section 7: Rebuild the database from empty for a pristine chain.")
+                print("="*60)
+                return
+
+            # 2. Recompute expected hash
+            conf_str = f"{float(confidence_score):.2f}" if confidence_score is not None else ""
+            payload_new = f"{timestamp}|{roll_number or ''}|{device_id or ''}|{event}|{severity}|{conf_str}|{prev_hash}"
+            expected_hash = hashlib.sha256(payload_new.encode('utf-8')).hexdigest()
             
             if expected_hash != stored_hash:
-                print("\n" + "="*60)
-                print("🚨 CRITICAL SECURITY ALERT: LOG TAMPERING DETECTED! 🚨")
-                print("="*60)
-                print(f"Chain broken at Log ID: {log_id}")
-                print(f"Timestamp of Tampered Entry: {timestamp}")
-                print(f"Event: {event}")
-                print(f"\nExpected Hash : {expected_hash}")
-                print(f"Stored Hash   : {stored_hash}")
-                print("="*60)
-                print("[!] All subsequent logs in this chain are mathematically invalidated.")
-                return
+                # Support legacy payload fallback for entries logged before schema upgrade
+                payload_legacy = f"{timestamp}|{roll_number}|{event}|{severity}|{prev_hash}"
+                expected_legacy = hashlib.sha256(payload_legacy.encode('utf-8')).hexdigest()
+                if expected_legacy == stored_hash:
+                    expected_hash = expected_legacy
+                else:
+                    print("\n" + "="*60)
+                    print("[!] CRITICAL SECURITY ALERT: LOG TAMPERING DETECTED!")
+                    print("="*60)
+                    print(f"Chain broken at Log ID: {log_id}")
+                    print(f"Timestamp of Tampered Entry: {timestamp}")
+                    print(f"Event: {event}")
+                    print(f"\nExpected Hash : {expected_hash}")
+                    print(f"Stored Hash   : {stored_hash}")
+                    print("="*60)
+                    print("[!] All subsequent logs in this chain are mathematically invalidated.")
+                    return
                 
-            prev_hash = expected_hash
+            prev_hash = stored_hash
             
-        print(f"\n✅ SUCCESS: Cryptographic Chain Verified!")
+        print(f"\n[+] SUCCESS: Cryptographic Chain Verified!")
         print(f"Analyzed {len(rows)} sequential entries.")
         print("No tampering detected. The audit trail is fully intact.")
         
@@ -108,6 +155,7 @@ def verify_log_integrity(conn):
 def main():
     parser = argparse.ArgumentParser(description="Security Monitoring Dashboard - Log Viewer")
     parser.add_argument("--roll", type=str, help="Filter by Roll Number")
+    parser.add_argument("--device", type=str, help="Filter by Device ID")
     parser.add_argument("--severity", type=str, choices=['INFO', 'LOW', 'MEDIUM', 'HIGH'], help="Filter by Threat Severity")
     parser.add_argument("--limit", type=int, default=20, help="Number of latest logs to display")
     parser.add_argument("--verify-integrity", action="store_true", help="Verify the cryptographic hash chain of the audit logs")
@@ -125,14 +173,24 @@ def main():
             return
             
         cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(logs)")
+        cols = [c[1] for c in cursor.fetchall()]
+        has_device = "device_id" in cols
+        has_conf = "confidence_score" in cols
         
-        query = "SELECT timestamp, roll_number, event, severity FROM logs"
+        dev_col = "device_id" if has_device else "'N/A'"
+        conf_col = "confidence_score" if has_conf else "NULL"
+        
+        query = f"SELECT timestamp, roll_number, {dev_col}, severity, {conf_col}, event FROM logs"
         params = []
         conditions = []
         
         if args.roll:
             conditions.append("roll_number = ?")
             params.append(args.roll)
+        if args.device and has_device:
+            conditions.append("device_id = ?")
+            params.append(args.device)
         if args.severity:
             conditions.append("severity = ?")
             params.append(args.severity)
@@ -143,50 +201,42 @@ def main():
         query += " ORDER BY id DESC LIMIT ?"
         params.append(args.limit)
         
-        # Check if severity column exists (in case migration didn't run)
-        try:
-            cursor.execute(query, params)
-            raw_logs = cursor.fetchall()
-        except sqlite3.OperationalError:
-            print("[Notice] Database migration for 'severity' pending. Run python login.py or database.py once to trigger migration.")
-            query = query.replace(", severity", "")
-            if args.severity:
-                print("[Error] Cannot filter by severity before migration runs.")
-                return
-            cursor.execute(query, params)
-            raw_logs = cursor.fetchall()
-            raw_logs = [(t, r, e, "N/A") for t, r, e in raw_logs]
+        cursor.execute(query, params)
+        raw_logs = cursor.fetchall()
 
         # Format rows
         formatted_rows = []
         import re
         
-        for timestamp, roll_number, event_raw, severity in raw_logs:
-            # Clean up timestamp for display (e.g. 2026-08-21 00:05:00)
+        for timestamp, roll_number, device_id, severity, confidence_score, event_raw in raw_logs:
             display_time = timestamp.replace("T", " ")[:19]
             
-            # Extract confidence score if present
-            conf_match = re.search(r'\(Conf:\s*([\d.]+)\)', event_raw)
-            base_event = re.sub(r'\s*\(Conf:\s*[\d.]+\)', '', event_raw)
+            # Confidence display
+            if confidence_score is not None:
+                conf_display = f"{float(confidence_score):.2f}"
+            else:
+                conf_match = re.search(r'\(Conf:\s*([\d.]+)\)', event_raw)
+                conf_display = conf_match.group(1) if conf_match else "-"
             
-            # Map raw event to English description
-            desc = EVENT_DESCRIPTIONS.get(base_event)
-            if not desc:
-                # Handle dynamic strings
-                if "PERIODIC_CHECK_NO_FACE" in base_event:
-                    desc = "User absent from camera frame"
-                else:
-                    desc = base_event
-                    
-            if conf_match:
-                desc += f" (Score: {conf_match.group(1)})"
-                    
-            formatted_rows.append((display_time, roll_number, severity, event_raw, desc))
+            # Strip inline score from event code if present
+            base_event = re.sub(r'\s*\(Conf:\s*[\d.]+\)', '', event_raw)
+            desc = EVENT_DESCRIPTIONS.get(base_event, base_event)
+            
+            formatted_rows.append((
+                display_time, 
+                roll_number or "SYSTEM", 
+                device_id or "Local", 
+                severity, 
+                conf_display, 
+                base_event, 
+                desc
+            ))
             
         print("\n=== SECURITY MONITORING DASHBOARD ===")
-        print(f"Filters Active: Roll={args.roll or 'ALL'}, Severity={args.severity or 'ALL'}")
+        print(f"Database: {DB_PATH}")
+        print(f"Filters Active: Roll={args.roll or 'ALL'}, Device={args.device or 'ALL'}, Severity={args.severity or 'ALL'}")
         
-        headers = ["Timestamp", "Roll Number", "Severity", "Raw Event Code", "Description"]
+        headers = ["Timestamp", "Roll", "Device ID", "Severity", "Conf", "Event Code", "Description"]
         print_table(headers, formatted_rows)
         
     finally:
