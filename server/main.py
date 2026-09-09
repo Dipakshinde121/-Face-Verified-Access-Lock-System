@@ -4,6 +4,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+import os
 import base64
 import jwt
 from datetime import datetime, timedelta
@@ -33,7 +34,28 @@ def root():
     return RedirectResponse(url="/dashboard")
 
 # --- JWT OAUTH2 SECURITY CONFIGURATION ---
-JWT_SECRET = "highly-complex-production-signature-key-2026"
+# SECURITY PRINCIPLE: Elimination of Hardcoded Secrets (CWE-798)
+# The signing key is retrieved from the OS Keyring or environment variables.
+# It is never committed to source control or exposed in plaintext.
+def get_jwt_secret() -> str:
+    env_secret = os.environ.get("JWT_SECRET")
+    if env_secret:
+        return env_secret
+        
+    service_name = "LabAccessControlSystem"
+    try:
+        import keyring
+        key = keyring.get_password(service_name, "jwt_signing_secret")
+        if key:
+            return key
+        new_key = secrets.token_hex(32)
+        keyring.set_password(service_name, "jwt_signing_secret", new_key)
+        return new_key
+    except Exception as e:
+        print(f"[Security Notice] OS Keyring unavailable, using secure runtime key: {e}")
+        return secrets.token_hex(32)
+
+JWT_SECRET = get_jwt_secret()
 JWT_ALGORITHM = "HS256"
 # Principle of Least Privilege: Short-lived tokens to reduce damage window
 ACCESS_TOKEN_EXPIRE_HOURS = 24

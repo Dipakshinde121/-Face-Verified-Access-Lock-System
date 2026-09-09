@@ -11,3 +11,4 @@ PyJWT
 cryptography
 keyring
 pystray
+python-multipart
