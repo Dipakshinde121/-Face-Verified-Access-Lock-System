@@ -28,13 +28,19 @@ In shared laboratory environments (e.g., University Computer Labs), traditional 
 
 ---
 
-## 2. Core Features
-* 🔐 **3-Factor Authentication:** Roll Number (ID), TOTP Google Authenticator Code (Have), and Live Facial Biometrics (Are).
-* 👁️ **Continuous Verification:** A background daemon silently verifies the user's face every 30 seconds.
-* 🤖 **Liveness Detection (Anti-Spoofing):** Requires a randomized blink challenge (Eye Aspect Ratio calculation) to defeat photographs or tablet screens.
-* 🛡️ **Zero-Trust API:** All lab PCs act as untrusted edge clients communicating with a centralized FastAPI server via OAuth2 JWT tokens.
-* 🔒 **End-to-End Encryption:** Biometric data is encrypted using AES (Fernet) *before* it leaves the client PC. The server stores only encrypted blobs.
-* 🚨 **Fail-Closed Lockdown:** If the network goes down, or an unrecognized face appears, the system immediately locks the Windows/OS workstation.
+## 2. Core Security Concepts & Features
+* 🔐 **Multi-Factor Authentication (MFA):** Requires Roll Number (Identity Claim), TOTP RFC 6238 Authenticator Code (Possession), and Live Facial Biometrics (Inherence).
+* 👁️ **Continuous Authentication:** Background daemon continuously re-verifies the user's face every 30 seconds to prevent session hijacking.
+* 🤖 **Randomized Challenge-Response Liveness:** Anti-spoofing engine dynamically demands random actions (blink, head turn left/right, mouth open) within a tight 4-second window, defeating photo and video replay attacks.
+* 📊 **Confidence-Based Risk Assessment:** Computes 128-dimensional Euclidean embedding similarity into numerical confidence scores with three distinct risk bands (High, Medium/Borderline, Reject).
+* ⛓️ **Tamper-Evident Audit Logging:** Cryptographic SHA-256 hash chaining anchored to a Genesis Hash; any alteration or deletion of log entries is mathematically detectable via `--verify-integrity`.
+* 🛡️ **Per-Device Token-Based API Authentication:** Zero-Trust API architecture where each lab PC is provisioned with unique credentials and authenticates via short-lived OAuth2 JWTs.
+* 🔒 **Encryption at Rest with OS-Level Key Protection:** Biometric encodings and TOTP seeds are Fernet-encrypted at rest with keys secured in the host OS Keyring (Windows Credential Manager / macOS Keychain / Linux Secret Service).
+* 🌐 **Transport Security (TLS / HTTPS):** Enforces HTTPS encryption for all client-server communications, eliminating plaintext eavesdropping.
+* 🚪 **Anti-Tailgating / Single-Face Policy:** Enforces a strict single-face limit in the camera frame, immediately locking the terminal if multiple faces (shoulder surfers/piggybackers) are detected.
+* 🚨 **Fail-Closed Lockdown:** System always defaults to a secure locked state upon verification failure, network outage, or hardware disconnection.
+* 🔔 **Real-Time Incident Alerting:** Dispatches immediate webhook alerts (e.g. Discord) for HIGH-severity events (impersonation, tampering, or spoofing).
+* ⚙️ **Auditable Policy Override:** Allows administrators to temporarily pause monitoring with strict auto-expiring timeouts.
 
 ---
 
@@ -68,13 +74,16 @@ A rigorous cybersecurity system explicitly defines its scope and limitations.
 ### 🔴 Defended Attacks (In-Scope)
 * **Credential Sharing / Impersonation:** Defeated by continuous biometric facial recognition.
 * **Physical Session Hijacking:** Defeated by the continuous verification daemon. If a user walks away, the camera detects a missing face and locks the terminal within the defined grace period.
-* **Basic Presentation Attacks (2D Spoofing):** Defeated by the Liveness Detection module requiring human blinks.
-* **Database Compromise (Data-at-Rest):** Defeated by End-to-End Encryption. Attackers gaining access to the server's `.db` file will only see AES ciphertexts.
+* **Photo & Video Replay Attacks:** Defeated by the randomized multi-step Liveness Detection engine (blink, mouth open, head turn left/right).
+* **Shoulder Surfing / Piggybacking:** Defeated by strict single-face limit enforcing instant lockout when multiple faces enter the camera frame.
+* **Database Compromise (Data-at-Rest):** Defeated by Fernet symmetric encryption with keys protected in the host OS Keyring.
+* **Post-Incident Log Tampering:** Defeated by SHA-256 hash-chained audit logging anchored to a Genesis Hash.
+* **Network Eavesdropping / MiTM:** Defeated by enforced HTTPS/TLS transport security.
 
 ### 🟡 Documented Limitations (Out-of-Scope)
-* **Sophisticated 3D Mask Spoofing:** The current liveness check cannot reliably defeat high-fidelity 3D masks. Hardware-level IR/Depth cameras would be required for enterprise deployment.
-* **Network-Level Eavesdropping (Data-in-Transit):** For local testing, the API operates over plain HTTP. A true production deployment **MUST** wrap the FastAPI server in a reverse proxy (like Nginx) terminating TLS/HTTPS.
-* **Physical Hardware Tampering:** If a malicious user unplugs the webcam, the system assumes a hardware failure and will eventually lock the screen (fail-closed). However, physical tampering of the host OS kernel is out of scope.
+* **Sophisticated 3D Mask Spoofing:** Hardware-level IR/Depth cameras would be required for enterprise anti-mask defense.
+* **CA-Signed TLS Certificates:** Self-signed certificates are used for testing; production deployments require a trusted Certificate Authority.
+* **Full Local Database Rewrite:** Hash chaining makes tampering detectable, but not impossible if an attacker rewrites the entire chain from scratch on a compromised host (production requires an append-only remote ledger).
 
 ---
 
@@ -82,16 +91,19 @@ A rigorous cybersecurity system explicitly defines its scope and limitations.
 ```text
 ├── server/
 │   ├── main.py              # FastAPI Central Server & JWT OAuth2 Logic
-│   └── database.py          # Centralized SQLite Database engine
+│   └── database.py          # Centralized SQLite Database & Hash Chaining
 ├── src/
 │   ├── api_client.py        # Edge client handler for JWTs and E2EE encryption
 │   └── crypto_utils.py      # AES Fernet encryption utilities
+├── config.py                # Centralized configuration loader (TRD §6)
+├── lock.py                  # Cross-platform OS workstation lock (TRD §2)
 ├── register.py              # CLI tool to enroll new students and generate TOTP QR codes
 ├── login.py                 # Core authentication entry point (3-Factor Auth)
 ├── verify.py                # Continuous background verification daemon
-├── liveness_check.py        # Anti-spoofing blink challenge calculator
+├── liveness_check.py        # Anti-spoofing randomized challenge-response calculator
 ├── tray_app.py              # System Tray UI for manual lock and policy pauses
-├── log_viewer.py            # Utility to read the centralized audit logs
+├── log_viewer.py            # Utility to read and cryptographically audit logs
+├── test_integration.py      # End-to-end defense-in-depth integration test suite
 └── test_checklist.md        # Comprehensive security bug-sweep test cases
 ```
 
