@@ -150,4 +150,4 @@ python login.py
 
 ---
 *Built as a Cybersecurity Final Year Project focusing on Identity & Access Management (IAM).*
-<!-- System continually hardened for production use. -->
+<!-- Welcome back! Active development resumed for Phase 3. -->
