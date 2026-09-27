@@ -36,31 +36,16 @@ EVENT_DESCRIPTIONS = {
 }
 
 def print_table(headers, rows):
-    """Prints a beautifully formatted ASCII table."""
+    """Prints a formatted ASCII table."""
     if not rows:
         print("   (No data found matching criteria)")
         return
-        
-    # Calculate column widths
-    widths = [len(h) for h in headers]
-    for row in rows:
-        for i, val in enumerate(row):
-            widths[i] = max(widths[i], len(str(val)))
-            
-    # Print separator
-    sep = "+" + "+".join(["-" * (w + 2) for w in widths]) + "+"
-    print(sep)
-    
-    # Print headers
-    header_str = "|" + "|".join([f" {headers[i]:<{widths[i]}} " for i in range(len(headers))]) + "|"
-    print(header_str)
-    print(sep)
-    
-    # Print rows
-    for row in rows:
-        row_str = "|" + "|".join([f" {str(row[i]):<{widths[i]}} " for i in range(len(row))]) + "|"
-        print(row_str)
-        
+    widths = [max(len(str(val)) for val in col) for col in zip(headers, *rows)]
+    sep = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
+    fmt = lambda row: "|" + "|".join(f" {str(val):<{widths[i]}} " for i, val in enumerate(row)) + "|"
+    print(f"{sep}\n{fmt(headers)}\n{sep}")
+    for r in rows:
+        print(fmt(r))
     print(sep)
 
 def verify_log_integrity(conn):
@@ -70,18 +55,8 @@ def verify_log_integrity(conn):
     
     try:
         cursor = conn.cursor()
-        cursor.execute("PRAGMA table_info(logs)")
-        cols = [c[1] for c in cursor.fetchall()]
-        has_prev_col = "previous_hash" in cols
-        has_device_col = "device_id" in cols
-        has_conf_col = "confidence_score" in cols
-        
-        dev_select = "device_id" if has_device_col else "NULL"
-        conf_select = "confidence_score" if has_conf_col else "NULL"
-        prev_select = "previous_hash" if has_prev_col else "NULL"
-        
-        cursor.execute(f"""
-            SELECT id, timestamp, roll_number, {dev_select}, event, severity, {conf_select}, entry_hash, {prev_select}
+        cursor.execute("""
+            SELECT id, timestamp, roll_number, device_id, event, severity, confidence_score, entry_hash, previous_hash
             FROM logs ORDER BY id ASC
         """)
         rows = cursor.fetchall()
@@ -173,32 +148,19 @@ def main():
             return
             
         cursor = conn.cursor()
-        cursor.execute("PRAGMA table_info(logs)")
-        cols = [c[1] for c in cursor.fetchall()]
-        has_device = "device_id" in cols
-        has_conf = "confidence_score" in cols
-        
-        dev_col = "device_id" if has_device else "'N/A'"
-        conf_col = "confidence_score" if has_conf else "NULL"
-        
-        query = f"SELECT timestamp, roll_number, {dev_col}, severity, {conf_col}, event FROM logs"
-        params = []
-        conditions = []
-        
+        conditions, params = [], []
         if args.roll:
             conditions.append("roll_number = ?")
             params.append(args.roll)
-        if args.device and has_device:
+        if args.device:
             conditions.append("device_id = ?")
             params.append(args.device)
         if args.severity:
             conditions.append("severity = ?")
             params.append(args.severity)
             
-        if conditions:
-            query += " WHERE " + " AND ".join(conditions)
-            
-        query += " ORDER BY id DESC LIMIT ?"
+        where = f" WHERE {' AND '.join(conditions)}" if conditions else ""
+        query = f"SELECT timestamp, roll_number, device_id, severity, confidence_score, event FROM logs{where} ORDER BY id DESC LIMIT ?"
         params.append(args.limit)
         
         cursor.execute(query, params)

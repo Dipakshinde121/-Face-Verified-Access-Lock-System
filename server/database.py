@@ -58,29 +58,6 @@ def init_db(db_path=DB_PATH):
         );
         """)
         
-        # Dynamic migrations for devices table
-        for col_name, col_type, default_val in [
-            ("device_label", "TEXT", "'Lab-PC'"),
-            ("last_seen", "TEXT", "NULL"),
-            ("revoked", "INTEGER", "0")
-        ]:
-            try:
-                cursor.execute(f"ALTER TABLE devices ADD COLUMN {col_name} {col_type} DEFAULT {default_val};")
-            except sqlite3.OperationalError:
-                pass
-
-        # Dynamic migrations for logs table
-        for col_name, col_type, default_val in [
-            ("device_id", "TEXT", "NULL"),
-            ("confidence_score", "REAL", "NULL"),
-            ("previous_hash", "TEXT", f"'{GENESIS_HASH}'"),
-            ("entry_hash", "TEXT", "NULL")
-        ]:
-            try:
-                cursor.execute(f"ALTER TABLE logs ADD COLUMN {col_name} {col_type} DEFAULT {default_val};")
-            except sqlite3.OperationalError:
-                pass
-            
         conn.commit()
     finally:
         conn.close()
@@ -109,14 +86,8 @@ def get_device_server(device_id: str, db_path=DB_PATH):
     conn = get_db_connection(db_path)
     try:
         cursor = conn.cursor()
-        cursor.execute("PRAGMA table_info(devices)")
-        cols = [col[1] for col in cursor.fetchall()]
-        revoked_col = "revoked" if "revoked" in cols else "is_revoked"
-        label_col = "device_label" if "device_label" in cols else "'Lab-PC'"
-        last_seen_col = "last_seen" if "last_seen" in cols else "NULL"
-        
         cursor.execute(
-            f"SELECT device_secret, {revoked_col}, {label_col}, {last_seen_col} FROM devices WHERE device_id = ?",
+            "SELECT device_secret, revoked, device_label, last_seen FROM devices WHERE device_id = ?",
             (device_id,)
         )
         row = cursor.fetchone()

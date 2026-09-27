@@ -4,33 +4,15 @@ import os
 DB_PATH = "access_control.db"
 
 def print_table(headers, rows):
-    """
-    Helper function to print formatted ASCII tables.
-    """
     if not rows:
         print("   (No data found)")
         return
-        
-    # Calculate column widths
-    widths = [len(h) for h in headers]
-    for row in rows:
-        for i, val in enumerate(row):
-            widths[i] = max(widths[i], len(str(val)))
-            
-    # Print separator
-    sep = "+" + "+".join(["-" * (w + 2) for w in widths]) + "+"
-    print(sep)
-    
-    # Print headers
-    header_str = "|" + "|".join([f" {headers[i]:<{widths[i]}} " for i in range(len(headers))]) + "|"
-    print(header_str)
-    print(sep)
-    
-    # Print rows
-    for row in rows:
-        row_str = "|" + "|".join([f" {str(row[i]):<{widths[i]}} " for i in range(len(row))]) + "|"
-        print(row_str)
-        
+    widths = [max(len(str(val)) for val in col) for col in zip(headers, *rows)]
+    sep = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
+    fmt = lambda row: "|" + "|".join(f" {str(val):<{widths[i]}} " for i, val in enumerate(row)) + "|"
+    print(f"{sep}\n{fmt(headers)}\n{sep}")
+    for r in rows:
+        print(fmt(r))
     print(sep)
 
 def main():

@@ -23,6 +23,7 @@ class ContinuousVerificationThread(threading.Thread):
         self.daemon = True
         self.running = True
         self.missed_checks = 0
+        self.stop_event = threading.Event()
         
         # Anti-Tamper & Pause State
         self.is_paused = False
@@ -33,6 +34,7 @@ class ContinuousVerificationThread(threading.Thread):
 
     def stop(self):
         self.running = False
+        self.stop_event.set()
 
     def pause_monitoring(self):
         """Auditable policy override to temporarily pause webcam checks (Schema §4)."""
@@ -167,19 +169,14 @@ class ContinuousVerificationThread(threading.Thread):
                     
                     self.trigger_lock()
 
-            # Wait for next interval if still running
-            self._sleep_interval()
-
-    def _sleep_interval(self):
-        """Sleeps for the check interval, but can be interrupted quickly if stopped."""
-        for _ in range(self.check_interval):
-            if not self.running:
+            # Wait for next interval or immediate exit if stopped
+            if self.stop_event.wait(timeout=self.check_interval):
                 break
-            time.sleep(1)
 
     def trigger_lock(self):
         """Forces the OS to lock and the main application to exit, securing the terminal."""
         self.running = False
+        self.stop_event.set()
         lock_workstation()
         # Interrupts the main thread cleanly
         _thread.interrupt_main()

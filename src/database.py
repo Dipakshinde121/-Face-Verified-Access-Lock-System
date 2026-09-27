@@ -26,40 +26,25 @@ def init_db(db_path=DB_PATH):
     try:
         cursor = conn.cursor()
         
-        # Create students table
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS students (
             roll_number TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             face_encoding BLOB NOT NULL,
+            totp_secret BLOB,
             registered_date TEXT NOT NULL
         );
         """)
-        
-        # Migration: Add totp_secret column if it doesn't exist (for MFA)
-        try:
-            cursor.execute("ALTER TABLE students ADD COLUMN totp_secret BLOB;")
-        except sqlite3.OperationalError:
-            pass
-        
-        # Create logs table
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             roll_number TEXT NOT NULL,
             event TEXT NOT NULL,
             timestamp TEXT NOT NULL,
+            severity TEXT DEFAULT 'INFO',
             FOREIGN KEY (roll_number) REFERENCES students (roll_number)
         );
         """)
-        
-        # Migration: Add severity column if it doesn't exist (for older DBs)
-        try:
-            cursor.execute("ALTER TABLE logs ADD COLUMN severity TEXT DEFAULT 'INFO';")
-        except sqlite3.OperationalError:
-            # Column already exists, safe to ignore
-            pass
-        
         conn.commit()
     finally:
         conn.close()

@@ -172,6 +172,3 @@ def log_event(roll_number, event, severity="INFO", confidence_score=None, device
         # If logging fails, we return False. 
         # In a high-security Fail-Closed system, failing to log might trigger a lockdown.
         return False
-
-def init_db(db_path=None):
-    pass

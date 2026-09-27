@@ -2,18 +2,9 @@ import requests
 import json
 from datetime import datetime
 
-def load_webhook_url():
-    import os
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(base_dir, "config.json")
-    try:
-        with open(config_path, "r") as f:
-            config = json.load(f)
-            return config.get("discord_webhook_url", "")
-    except Exception:
-        return ""
+from config import load_config
 
-WEBHOOK_URL = load_webhook_url()
+WEBHOOK_URL = load_config().get("discord_webhook_url", "")
 
 def trigger_high_severity_alert(roll_number, event_description="Unrecognized face detected (Possible Impersonation Attempt)"):
     """
