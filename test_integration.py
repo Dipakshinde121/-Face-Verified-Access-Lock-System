@@ -1,5 +1,5 @@
 """
-test_integration.py - Full Integration Test & Defense-in-Depth Validation (Day 20)
+test_integration.py - Full Integration Test & Defense-in-Depth Validation ()
 Tests all security layers working in concert:
 - Keyring + HTTPS/TLS + JWT Per-Device Auth
 - Multi-Factor Auth (TOTP + Biometrics)
@@ -36,7 +36,7 @@ client = TestClient(app)
 
 def run_integration_tests():
     print("=" * 70)
-    print("DAY 20: FULL INTEGRATION TEST & DEFENSE-IN-DEPTH VALIDATION")
+    print("FULL INTEGRATION TEST & DEFENSE-IN-DEPTH VALIDATION")
     print("=" * 70)
     
     results = {}
@@ -273,9 +273,9 @@ def run_integration_tests():
             
     print("=" * 70)
     if all_passed:
-        print(">>> ALL DEFENSE-IN-DEPTH INTEGRATION TESTS PASSED (10/10) <<<")
+        print(f">>> ALL DEFENSE-IN-DEPTH INTEGRATION TESTS PASSED ({len(results)}/{len(results)}) <<<")
     else:
-        print(">>> SOME TESTS FAILED <<<")
+        print(f">>> SOME TESTS FAILED (passed {sum(1 for v in results.values() if v == 'PASS')}/{len(results)}) <<<")
         
     return all_passed
 
