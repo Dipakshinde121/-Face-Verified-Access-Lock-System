@@ -146,7 +146,7 @@ def main():
             # --- LIVENESS CHALLENGE (ANTI-SPOOFING) ---
             print(f"\n[SECURITY] Initiating Liveness Detection for {name}...")
             from liveness_check import run_liveness_challenge
-            liveness_passed = run_liveness_challenge()
+            liveness_passed = run_liveness_challenge(expected_encoding=face_encoding)
             
             if not liveness_passed:
                 print("\n[SECURITY ALERT] Liveness check failed! Possible presentation attack.")

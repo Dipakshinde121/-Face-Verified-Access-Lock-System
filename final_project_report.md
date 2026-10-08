@@ -1019,21 +1019,21 @@ The following formal verification matrix compiles all twenty-two test cases exec
 | **TC-05** | Biometric Decryption | Cryptographic Parity | Encrypted blob + OS Keyring Fernet key | Decrypted vector matches original exactly | Bitwise identical 128-d floating vector | **PASS** |
 | **TC-06** | TOTP In-Window | RFC 6238 Valid Code | Current 6-digit rotating Google Auth code | TOTP verified within $\pm 30$s drift | Token verified; Factor 3 passed | **PASS** |
 | **TC-07** | TOTP Rejection | Fraudulent TOTP Code | Incorrect 6-digit code (`000000`) | Fast-fail rejection; log `INVALID_TOTP` | Rejection logged at HIGH severity | **PASS** |
-| **TC-08** | Liveness Anti-Spoof | 2D Print Presentation | Static printed photograph held to webcam | 4.0s timer expires without landmark motion | Denied; `LIVENESS_FAIL` logged | **PASS** |
-| **TC-09** | Liveness Anti-Spoof | Video Loop Presentation | Replaying pre-recorded head turn video | Dynamic challenge mismatches replay loop | Denied; 4.0s countdown expires | **PASS** |
-| **TC-10** | Liveness Success | Legitimate Human Action | User performs demanded motion (e.g. Turn Left) | Dynamic landmark ratio crosses threshold | Challenge passes; login completes | **PASS** |
+| **TC-08** | Liveness Anti-Spoof | 2D Print Presentation | Static printed photograph held to webcam | 4.0s timer expires without landmark motion | Denied; `LIVENESS_FAIL` logged | Manual — pending confirmation |
+| **TC-09** | Liveness Anti-Spoof | Video Loop Presentation | Replaying pre-recorded head turn video | Dynamic challenge mismatches replay loop | Denied; 4.0s countdown expires | Manual — pending confirmation |
+| **TC-10** | Liveness Success | Legitimate Human Action | User performs demanded motion (e.g. Turn Left) | Dynamic landmark ratio crosses threshold | Challenge passes; login completes | Manual — pending confirmation |
 | **TC-11** | Face Matching | High-Confidence Match | Genuine enrolled student ($d \le 0.40$) | Score mapped to High Band ($\ge 0.60$) | Logged `MATCH` (Severity: `LOW`) | **PASS** |
 | **TC-12** | Face Matching | Borderline Lighting | Sub-optimal lighting ($0.40 < d \le 0.60$) | Score mapped to Medium Band ($0.50-0.60$) | Logged `MATCH_LOW_CONFIDENCE` | **PASS** |
 | **TC-13** | Impersonation Lock | Face Swap during Session | Unregistered peer sits before active terminal | Euclidean distance $> 0.60$; instant lock | `LOCK_FACE_MISMATCH` logged; screen locked | **PASS** |
-| **TC-14** | Absence Lockout | User Departure (Grace) | Zero faces detected for 1 check (30s) | Grace period counter increments to 1 | No lock; warning state recorded | **PASS** |
-| **TC-15** | Absence Lockout | User Departure (Timeout) | Zero faces detected for 2 checks (60s) | Grace expired; OS workstation locked | `LOCK_NO_FACE_TIMEOUT`; OS locked | **PASS** |
-| **TC-16** | Anti-Tailgating | Multiple Faces in Frame | Two individuals seated within camera FOV | Detect `len(faces) > 1`; instant lock | `LOCK_MULTIPLE_FACES` logged; OS locked | **PASS** |
+| **TC-14** | Absence Lockout | User Departure (Grace) | Zero faces detected for 1 check (30s) | Grace period counter increments to 1 | No lock; warning state recorded | Manual — pending confirmation |
+| **TC-15** | Absence Lockout | User Departure (Timeout) | Zero faces detected for 2 checks (60s) | Grace expired; OS workstation locked | `LOCK_NO_FACE_TIMEOUT`; OS locked | Manual — pending confirmation |
+| **TC-16** | Anti-Tailgating | Multiple Faces in Frame | Two individuals seated within camera FOV | Detect `len(faces) > 1`; instant lock | `LOCK_MULTIPLE_FACES` logged; OS locked | Manual — pending confirmation |
 | **TC-17** | Hash Chain Continuity | Mid-Stream Negative Log | Insert `LIVENESS_FAIL` mid-session | Valid SHA-256 chain links across failure | Hash continuity preserved ($H_i = \text{hash}(H_{i-1})$) | **PASS** |
 | **TC-18** | Forensic Audit | Unmodified Log Integrity | Execute `log_viewer.py --verify-integrity` | Complete traversal reports zero tampering | "SUCCESS: Cryptographic Chain Verified" | **PASS** |
 | **TC-19** | Tamper Catching | Forensic Score Tamper | Alter Log confidence score via raw SQL | Audit traversal detects mismatch at exact ID | Tamper flagged at exact row; execution halts | **PASS** |
-| **TC-20** | Fail-Closed Policy | Server Process Killed | Terminate server while session is active | Next 30s check catches network failure | Fail-closed lock engaged; screen locked | **PASS** |
-| **TC-21** | Ciphertext Tamper | Bit-Flipping in DB Blob | Corrupt 16 bytes of stored biometric blob | Decryption raises `InvalidToken` | `TAMPER_DETECTED` logged; access aborted | **PASS** |
-| **TC-22** | Session Hygiene | Consecutive User Login | User A locks; User B logs in immediately | Complete teardown of memory and threads | Clean state; zero biometric crossover | **PASS** |
+| **TC-20** | Fail-Closed Policy | Server Process Killed | Terminate server while session is active | Next 30s check catches network failure | Fail-closed lock engaged; screen locked | Manual — pending confirmation |
+| **TC-21** | Ciphertext Tamper | Bit-Flipping in DB Blob | Corrupt 16 bytes of stored biometric blob | Decryption raises `InvalidToken` | `TAMPER_DETECTED` logged; access aborted | Manual — pending confirmation |
+| **TC-22** | Session Hygiene | Consecutive User Login | User A locks; User B logs in immediately | Complete teardown of memory and threads | Clean state; zero biometric crossover | Manual — pending confirmation |
 
 *[INSERT FIGURE 6.1: Terminal Screenshot of the Automated Defense-in-Depth Integration Test Suite Executing with 100% Pass Rate]*
 
@@ -1043,10 +1043,10 @@ The following formal verification matrix compiles all twenty-two test cases exec
 
 ### 7.1 Operational Evaluation and Experimental Setup
 The system was evaluated in an active laboratory environment simulating a 30-workstation academic computer lab. Edge client testing was conducted on commodity hardware representing typical educational terminal specifications:
-- **Processor:** Intel Core i5-1135G7 (4 cores, 8 threads @ 2.40 GHz base, up to 4.20 GHz boost).
-- **System Memory:** 16 GB DDR4 RAM @ 3200 MHz.
+- **Processor:** Commodity x86_64 CPU (exact specifications unmeasured on this instance).
+- **System Memory:** Standard DDR4 RAM.
 - **Operating System:** Microsoft Windows 11 Enterprise (64-bit, Build 22631).
-- **Camera Sensor:** Integrated USB 2.0 HD Webcam (720p resolution @ 30 frames per second, fixed focal length, f/2.2 aperture).
+- **Camera Sensor:** Standard RGB webcam (exact specifications unmeasured).
 - **Server Environment:** FastAPI ASGI application served via Uvicorn over TLS 1.3, backed by SQLite 3.45 with Write-Ahead Logging (WAL) enabled.
 
 ```
@@ -1068,14 +1068,14 @@ The system was evaluated in an active laboratory environment simulating a 30-wor
 │ Background Daemon Inference Burst    │ 274 ms             │ $\pm 24\text{ ms}$         │
 │ Idle Daemon CPU Utilization          │ 0.18%              │ Range: $0.1\% - 0.4\%$     │
 │ Active Inference CPU Utilization     │ 11.8% (320 ms)     │ Range: $9.5\% - 13.2\%$    │
-│ Resident Memory Footprint (RAM)      │ 134.8 MB           │ Steady-state working set   │
+│ Resident Memory Footprint (RAM)      │ (Unmeasured) MB           │ Steady-state working set   │
 └──────────────────────────────────────┴────────────────────┴────────────────────────────┘
 ```
 
 #### Observations from Empirical Evaluation:
-1. **Enrollment Efficiency:** The average student completed registration in under 26 seconds. The only human-dependent delay was launching the Google Authenticator app and pointing the mobile camera at the on-screen QR code. Raw facial frames were discarded from RAM immediately after 128-d vector extraction; no raw biometric images persisted on disk.
+1. **Enrollment Efficiency:** The average student completed registration in (Unmeasured) seconds. The only human-dependent delay was launching the Google Authenticator app and pointing the mobile camera at the on-screen QR code. Raw facial frames were discarded from RAM immediately after 128-d vector extraction; no raw biometric images persisted on disk.
 2. **Login Determinism:** Login latency was bounded almost entirely by the 4.0-second challenge-response liveness window. The cryptographic, biometric, and network steps combined executed in under 450 milliseconds.
-3. **Daemon Non-Intrusiveness:** During the 29.7 seconds of sleep between 30-second verification cycles, the daemon thread remained suspended in a native kernel wait state via `threading.Event()`, consuming virtually zero CPU cycles ($0.18\%$). When the timer expired, frame capture, landmark extraction, and Euclidean distance scoring completed in 274 milliseconds, causing no perceptible stutter, mouse latency, or keystroke drops in foreground applications (e.g., Visual Studio Code, web browsers).
+3. **Daemon Non-Intrusiveness:** During the (Unmeasured) seconds of sleep between 30-second verification cycles, the daemon thread remained suspended in a native kernel wait state via `threading.Event()`, consuming virtually zero CPU cycles ($0.18\%$). When the timer expired, frame capture, landmark extraction, and Euclidean distance scoring completed in (Unmeasured) milliseconds, causing no perceptible stutter, mouse latency, or keystroke drops in foreground applications (e.g., Visual Studio Code, web browsers).
 
 ---
 
@@ -1110,7 +1110,7 @@ To ensure deployment viability on budget educational hardware without discrete g
 | 5. Fernet Encryption / Decryption | 1.1 ms             | < 0.5%             | Negligible         |
 | 6. SHA-256 Hash Chaining & Insert | 4.6 ms             | 1.2%               | Negligible         |
 +-----------------------------------+--------------------+--------------------+--------------------+
-| Total Per-Check Cycle Footprint   | ~273.8 ms          | ~11.8% (Burst)     | ~134.8 MB Total    |
+| Total Per-Check Cycle Footprint   | ~273.8 ms          | ~11.8% (Burst)     | ~(Unmeasured) MB Total    |
 +-----------------------------------+--------------------+--------------------+--------------------+
 ```
 
@@ -1130,7 +1130,7 @@ Designing a production-grade access control system requires navigating inherent 
 
 #### 2. Liveness Challenge Temporal Window (4.0 Seconds)
 - *The Trade-Off:* A very short countdown (e.g., 2.0 seconds) provides maximum security against presentation attacks by leaving zero time for an attacker to swap video clips. However, human motor reaction time—reading the on-screen prompt, processing the requested direction, and initiating head rotation—requires approximately 1.5 to 2.5 seconds. Setting the timer too tight causes legitimate students to fail liveness challenges, leading to user frustration.
-- *Resolution:* A 4.0-second countdown window was selected. Empirical testing across diverse user cohorts demonstrated a $98.2\%$ first-attempt success rate for genuine users, while providing insufficient time for an attacker holding pre-recorded video replays to find and play the demanded motion.
+- *Resolution:* A 4.0-second countdown window was selected. Exact first-attempt success rates for genuine users were not measured in this phase due to the lack of human trials, but this window provides insufficient time for an attacker holding pre-recorded video replays to find and play the demanded motion.
 
 #### 3. Biometric Thresholds and Risk Banding
 - *The Trade-Off:* Binary biometric matching (True/False based on a single threshold $d \le 0.60$) struggles with lighting variations in institutional laboratories. Under early morning sunlight, overhead fluorescent lamps, or evening shadow conditions, a legitimate user's Euclidean distance may fluctuate between $0.42$ and $0.55$. In a binary system, setting a strict threshold ($d \le 0.45$) causes frequent false rejections, while a loose threshold ($d \le 0.65$) increases false acceptance risk.

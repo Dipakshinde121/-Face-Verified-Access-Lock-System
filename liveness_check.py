@@ -46,10 +46,13 @@ def get_head_turn_ratio(shape):
         
     return dist_left / dist_right
 
-def run_liveness_challenge(predictor_filename="shape_predictor_68_face_landmarks.dat", challenge_duration=4.0):
+import face_recognition
+
+def run_liveness_challenge(predictor_filename="shape_predictor_68_face_landmarks.dat", challenge_duration=4.0, expected_encoding=None):
     """
     Runs a randomized Challenge-Response anti-spoofing challenge.
     Reduces the time window to 4.0 seconds to defeat pre-recorded staging attacks.
+    If expected_encoding is provided, it verifies the identity of the face performing the challenge.
     """
     base_dir = os.path.dirname(os.path.abspath(__file__))
     predictor_path = os.path.join(base_dir, predictor_filename)
@@ -160,6 +163,29 @@ def run_liveness_challenge(predictor_filename="shape_predictor_68_face_landmarks
             cv2.waitKey(1)
             
             if challenge_passed:
+                if expected_encoding is not None:
+                    # Verify identity
+                    face_locations = face_recognition.face_locations(rgb_frame)
+                    if not face_locations:
+                        print("\n[SECURITY ALERT] No face detected for identity confirmation.")
+                        return False
+                    
+                    encodings = face_recognition.face_encodings(rgb_frame, known_face_locations=face_locations)
+                    best_match = False
+                    for enc in encodings:
+                        dist = face_recognition.face_distance([expected_encoding], enc)[0]
+                        if (1.0 - dist) > 0.60:
+                            best_match = True
+                            break
+                            
+                    if not best_match:
+                        print("\n[SECURITY ALERT] Liveness identity mismatch! The face performing the challenge is not the enrolled student.")
+                        cv2.putText(frame, "IDENTITY MISMATCH!", (10, 90),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                        cv2.imshow("Liveness Challenge (Anti-Spoofing)", frame)
+                        cv2.waitKey(800)
+                        return False
+                        
                 cv2.putText(frame, "LIVENESS CONFIRMED!", (10, 90),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 cv2.imshow("Liveness Challenge (Anti-Spoofing)", frame)
