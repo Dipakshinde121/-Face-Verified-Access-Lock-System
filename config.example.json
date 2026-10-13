@@ -1,0 +1,22 @@
+{
+    "_comment_verification_interval": "Seconds between background webcam checks (default: 30).",
+    "verification_interval": 30,
+
+    "_comment_grace_period": "Number of consecutive missed checks before auto-locking (default: 2).",
+    "grace_period_missed_checks": 2,
+
+    "_comment_tolerance": "Biometric Euclidean distance threshold. Lower = stricter (default: 0.60).",
+    "face_match_tolerance": 0.6,
+
+    "_comment_totp_valid_window": "RFC 6238 TOTP time window tolerance in 30-second steps (default: 1 step / +-30s).",
+    "totp_valid_window": 1,
+
+    "_comment_max_pause": "Maximum seconds faculty can pause monitoring before fail-safe auto-resumes (default: 300).",
+    "max_pause_duration_seconds": 300,
+
+    "_comment_jwt_expiry_hours": "Lifetime of issued per-device OAuth2 JWT access tokens in hours (default: 24).",
+    "jwt_expiry_hours": 24,
+
+    "_comment_alerting": "Optional webhook URL for Real-Time Incident Alerting (e.g., Discord/Slack). Leave empty to disable.",
+    "discord_webhook_url": ""
+}

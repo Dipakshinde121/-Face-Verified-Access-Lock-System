@@ -1,14 +1,31 @@
-numpy<2.0.0
-opencv-python
-face_recognition
-setuptools<=80.10.2
-fastapi
-uvicorn
-requests
-pyotp
-qrcode
-PyJWT
-cryptography
-keyring
-pystray
-python-multipart
+# ==============================================================================
+# Pinned Dependencies - Lab Face-Verified Access Lock System
+# Verified against pip-audit / OSV Advisory Database
+# ==============================================================================
+
+# Core Biometrics & Computer Vision
+numpy==1.26.4
+opencv-python==4.11.0.86
+face-recognition==1.3.0
+
+# Build & Runtime Packaging
+# NOTE: Setuptools is pinned <= 80.10.2 because face_recognition_models depends on
+# pkg_resources, which is deprecated and removed in Setuptools 81+.
+setuptools==80.10.2
+
+# Backend API & Server Runtime
+fastapi==0.141.1
+uvicorn==0.52.4
+requests==2.34.2
+urllib3==2.8.0
+python-multipart==0.0.32
+
+# Multi-Factor Authentication & Cryptography
+pyotp==2.10.0
+qrcode==8.2
+PyJWT==2.15.1
+cryptography==50.0.1
+keyring==25.7.0
+
+# Desktop System Tray Management
+pystray==0.19.5

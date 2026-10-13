@@ -17,7 +17,7 @@ DEFAULT_CONFIG = {
 }
 
 def load_config() -> dict:
-    """Loads configuration merging defaults with config.json overrides."""
+    """Loads configuration merging defaults with config.json overrides and environment variables."""
     config = DEFAULT_CONFIG.copy()
     if os.path.exists(CONFIG_PATH):
         try:
@@ -25,4 +25,14 @@ def load_config() -> dict:
                 config.update({k: v for k, v in json.load(f).items() if not k.startswith("_")})
         except Exception as e:
             print(f"[Config Warning] Could not parse config.json, using defaults: {e}")
+            
+    # Secrets Hygiene: Environment variables override config file values
+    env_webhook = os.getenv("DISCORD_WEBHOOK_URL")
+    if env_webhook is not None:
+        config["discord_webhook_url"] = env_webhook
+        
+    env_interval = os.getenv("VERIFICATION_INTERVAL")
+    if env_interval is not None and env_interval.isdigit():
+        config["verification_interval"] = int(env_interval)
+        
     return config

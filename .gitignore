@@ -1,55 +1,86 @@
+# ==============================================================================
+# Git Ignore Rules - Lab Face-Verified Access Lock System
+# ==============================================================================
+
 # Python Virtual Environments
 .venv/
 venv/
 env/
 ENV/
+ENV*/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
 
-# Distribution / packaging
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+# Local Agents & Scratch Directories
+.agents/
+scratch/
+*.scratch*
 
-# IDEs and editors
+# IDEs and Editors
 .vscode/
 .idea/
 *.swp
 *.swo
+*.sublime-project
+*.sublime-workspace
 
-# Environment variables / secrets
+# Environment Variables & Secret Files (Secrets Hygiene)
 .env
 .env.local
+.env.*
+!.env.example
+config.json
+!config.example.json
 
-# Logs and databases
+# Local Databases & Forensic Logs
 *.log
+*.sqlite
 *.sqlite3
 *.db
+access_control.db
+*.db-journal
+*.db-wal
 
-# OS files
-Thumbs.db
-Desktop.ini
-.DS_Store
-
-# Cryptographic keys and certificates
+# Cryptographic Keys & Certificates
 *.pem
 *.key
 *.crt
+*.pfx
+*.p12
 secret.key
 server/key.pem
 server/cert.pem
+
+# Pre-trained Binary Models & Large Wheels (Keep Repo Lightweight)
+shape_predictor_68_face_landmarks.dat
+shape_predictor_*.dat
+*.dat.bz2
+*.whl
+
+# Distribution & Packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local Screen Recordings & Demo Media (Exclude raw MP4s from git)
+*.mp4
+*.mov
+*.avi
+*.mkv
+
+# OS Generated Files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+$RECYCLE.BIN/
