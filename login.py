@@ -1,7 +1,7 @@
 import sys
 import time
 from datetime import datetime
-from src.api_client import get_student_by_roll, get_face_by_roll, log_event, init_db, ServerUnreachableError
+from src.api_client import get_student_by_roll, get_face_by_roll, log_event, ServerUnreachableError
 
 class SessionState:
     """
@@ -22,8 +22,6 @@ class SessionState:
 def main():
     print("=== System Login ===")
     
-    # Initialize DB just in case it hasn't been created yet
-    init_db()
     
     failed_attempts = {}
 

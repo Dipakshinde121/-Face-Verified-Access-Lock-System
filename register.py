@@ -3,7 +3,7 @@ import face_recognition
 import numpy as np
 import time
 import sys
-from src.api_client import init_db, add_student, get_student_by_roll, log_event, ServerUnreachableError
+from src.api_client import add_student, get_student_by_roll, log_event, ServerUnreachableError
 
 def get_valid_input(prompt, error_msg="Input cannot be empty. Please try again."):
     """
@@ -18,8 +18,6 @@ def get_valid_input(prompt, error_msg="Input cannot be empty. Please try again."
 def main():
     print("=== Student Registration System ===")
     
-    # Initialize the database if not already done
-    init_db()
     
     # 1. Prompt for Roll Number and Name with validation
     roll_number = get_valid_input("Enter Roll Number (e.g. 21BCE001): ", "Roll number is required.")

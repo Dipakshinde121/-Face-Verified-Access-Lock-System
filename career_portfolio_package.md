@@ -251,7 +251,7 @@ Check out the full open-source repo, architecture diagrams, and threat model her
 ### Drill 3: Prove Biometric Data Encryption & Key Isolation
 - **The Challenge:** *"Show me where biometrics are stored and prove they are encrypted."*
 - **Action (60s):**
-  1. Run: `python view_db.py` (or open `access_control.db` in SQLite).
+  1. Run: `python log_viewer.py` (or inspect `server/central_access_control.db` in SQLite).
   2. Show the `face_encoding` column: it displays raw ciphertext bytes (`gAAAAABn...`).
   3. Open Python interactive console:
      ```python

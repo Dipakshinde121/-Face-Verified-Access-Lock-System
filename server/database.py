@@ -58,6 +58,12 @@ def init_db(db_path=DB_PATH):
         );
         """)
         
+        # System identity record for system-level audit events
+        cursor.execute("""
+        INSERT OR IGNORE INTO students (roll_number, name, face_encoding, totp_secret, registered_date)
+        VALUES ('SYSTEM', 'System Infrastructure', x'', x'', ?)
+        """, (datetime.now().isoformat(),))
+        
         conn.commit()
     finally:
         conn.close()
