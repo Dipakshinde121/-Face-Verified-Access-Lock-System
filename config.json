@@ -1,4 +1,6 @@
 {
+    "_comment_auth_mode": "Authentication policy mode: '2FA' (Identity Claim + Live Biometrics in ~2s) or '3FA' (Strict Exam Mode requiring RFC 6238 TOTP + Live Biometrics). Default: '2FA'.",
+    "auth_mode": "2FA",
     "_comment_verification_interval": "Seconds between background webcam checks.",
     "verification_interval": 30,
     "_comment_grace_period": "Number of consecutive missed checks before auto-locking. Higher = more lenient for moving around.",

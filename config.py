@@ -7,6 +7,7 @@ import os
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 
 DEFAULT_CONFIG = {
+    "auth_mode": "2FA",
     "verification_interval": 30,
     "grace_period_missed_checks": 2,
     "face_match_tolerance": 0.6,
@@ -26,7 +27,16 @@ def load_config() -> dict:
         except Exception as e:
             print(f"[Config Warning] Could not parse config.json, using defaults: {e}")
             
-    # Secrets Hygiene: Environment variables override config file values
+    # Secrets Hygiene & Policy Validation: Environment variables override config file values
+    env_auth_mode = os.getenv("AUTH_MODE")
+    if env_auth_mode is not None:
+        config["auth_mode"] = env_auth_mode.strip().upper()
+    elif isinstance(config.get("auth_mode"), str):
+        config["auth_mode"] = config["auth_mode"].strip().upper()
+
+    if config.get("auth_mode") not in ("2FA", "3FA"):
+        config["auth_mode"] = "2FA"
+
     env_webhook = os.getenv("DISCORD_WEBHOOK_URL")
     if env_webhook is not None:
         config["discord_webhook_url"] = env_webhook

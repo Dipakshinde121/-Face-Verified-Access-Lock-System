@@ -66,8 +66,11 @@ flowchart TD
 | **ATK-07** | Missing Authorization Header | Query `/student/{roll}` or `/log` without providing a JWT bearer token. | `curl -k https://127.0.0.1:8000/student/TEST_ROLL` | FastAPI `Depends(verify_jwt_token)` security dependency. | **PASS (Blocked):** Returns `HTTP 401 Unauthorized`; payload shielded.<br>**FAIL (Bypassed):** Endpoint returns data. |
 | **ATK-08** | Tampered JWT Signature | Modify token payload claims (e.g., change `device_id`) and submit with original signature. | 1. Obtain valid JWT.<br>2. Base64-decode payload; change `device_id` to `admin-pc`.<br>3. Reassemble token and submit in header. | PyJWT signature verification with server secret `JWT_SECRET`. | **PASS (Blocked):** Returns `HTTP 403 Forbidden` (`Invalid token signature`); logs `API_AUTH_FAILED_INVALID_TOKEN`.<br>**FAIL (Bypassed):** Modified payload accepted. |
 | **ATK-09** | JWT "None" Algorithm Attack | Bypass signature verification by submitting a token with header `{"alg": "none"}`. | 1. Construct JWT with `alg="none"`.<br>2. Strip signature: `header.payload.`.<br>3. Submit to `/student/{roll}`. | PyJWT explicit algorithm pinning (`algorithms=["HS256"]`). | **PASS (Blocked):** Returns `HTTP 403 Forbidden`; token rejected.<br>**FAIL (Bypassed):** Unsigned token processed. |
+| **ATK-09b** | Expired JWT Replay | Replay a previously valid JWT token after its expiration timestamp. | Submit token with expired `exp` claim to `/student/{roll}`. | PyJWT temporal claim validation (`ExpiredSignatureError`). | **PASS (Blocked):** Returns `HTTP 401 Unauthorized`; access denied.<br>**FAIL (Bypassed):** Expired token continues granting access. |
 | **ATK-10** | Insecure Direct Object Reference (IDOR) | Device provisioned for Student A attempts to harvest Student B's biometric vector. | `curl -k -H "Authorization: Bearer <JWT>" https://127.0.0.1:8000/student/VICTIM_ROLL` | End-to-End Encryption (E2EE): returned data is Fernet ciphertext. | **PASS (Blocked):** Central API returns encrypted ciphertext blobs; attacker cannot decrypt without victim's Fernet key from OS Keyring.<br>**FAIL (Bypassed):** Plaintext biometric vectors exposed. |
+| **ATK-10b** | Cross-Device / Revoked Token Abuse | Replay a stolen token from another PC or a decommissioned/revoked device. | Admin revokes device in DB (`revoked=1`); attacker submits validly-signed token. | Real-time database revocation check in `verify_jwt_token`. | **PASS (Blocked):** Returns `HTTP 403 Forbidden` (`Device has been revoked`); dispatches HIGH alert.<br>**FAIL (Bypassed):** Stolen/revoked token grants access until expiration. |
 | **ATK-11** | SQL Injection Probing | Inject classic SQL syntax (`' OR '1'='1`, `DROP TABLE`) into `/student/{roll}` and `/register`. | 1. `GET /student/'%20OR%20'1'='1`<br>2. `POST /register` with `roll_number="'; DROP TABLE logs;--"`. | SQLite parameterized queries (`?` parameter markers) in `database.py`. | **PASS (Blocked):** Queries safely treated as literal strings; `/student` returns 404; database tables remain intact.<br>**FAIL (Bypassed):** SQL syntax executes; table dropped or data leaked. |
+| **ATK-11b** | Oversized & Malformed Payloads | Submit type mismatches (string for float) and multi-megabyte payloads to cause DoS/crashes. | 1. Submit string to `confidence_score`.<br>2. Submit 1 MB string payload to `/register`. | Pydantic strict typing and request schema validation in FastAPI. | **PASS (Blocked):** Returns `HTTP 422 Unprocessable Entity` or safely handled without server crash.<br>**FAIL (Bypassed):** Server raises unhandled 500 error or crashes. |
 
 ---
 
@@ -87,39 +90,42 @@ flowchart TD
 
 | Attack ID | Attack Name | Attacker Goal | Execution Steps | Target Defensive Control | Pass vs. Fail Criteria |
 | :---: | :--- | :--- | :--- | :--- | :--- |
-| **ATK-15** | Direct SQLite Database Inspection | Steal raw face images, landmark coordinates, or TOTP secrets from `access_control.db`. | 1. Open `access_control.db` in SQLite CLI.<br>2. Run `SELECT roll_number, face_encoding, totp_secret FROM students;`. | Authenticated Fernet AES-128 encryption at rest. | **PASS (Blocked):** `face_encoding` and `totp_secret` appear exclusively as high-entropy ciphertext BLOBs (`gAAAAABn...`); zero plaintext numbers or images.<br>**FAIL (Bypassed):** Plaintext floats or base32 strings visible. |
+| **ATK-15** | Direct SQLite Database Inspection | Steal raw face images, landmark coordinates, or TOTP secrets from `central_access_control.db`. | 1. Open `server/central_access_control.db` in SQLite CLI.<br>2. Run `SELECT roll_number, face_encoding, totp_secret FROM students;`. | Authenticated Fernet AES-128 encryption at rest. | **PASS (Blocked):** `face_encoding` and `totp_secret` appear exclusively as high-entropy ciphertext BLOBs (`gAAAAABn...`); zero plaintext numbers or images.<br>**FAIL (Bypassed):** Plaintext floats or base32 strings visible. |
 | **ATK-16** | Filesystem Master Key Hunt | Locate the symmetric Fernet master encryption key in configuration files or code. | Grep project directory for base64 32-byte strings or `secret.key`. | Key isolation in host Operating System Keyring (`keyring` library). | **PASS (Blocked):** No encryption keys found in source code, `.env`, or database files; key exists solely in Windows Credential Manager.<br>**FAIL (Bypassed):** Static key discovered in repo. |
 | **ATK-17** | Ciphertext Bit-Flipping Tampering | Alter stored biometric vectors in SQLite to hijack authentication. | 1. Read student record from database.<br>2. Flip 16 random bits inside the `face_encoding` BLOB.<br>3. Attempt login. | Fernet HMAC-SHA256 authenticated ciphertext integrity verification. | **PASS (Blocked):** Decryption raises `ValueError("TAMPER_DETECTED")` / `InvalidToken`; login aborted.<br>**FAIL (Bypassed):** Corrupted vector decrypts to garbage and crashes without detection. |
 
 ---
 
 ### Category 6: Audit Log Integrity & Anti-Tampering Attacks
-*Security Rationale:* Forensic non-repudiation requires that retroactive modification or deletion of security incidents is mathematically detectable.
+*Security Rationale:* Forensic non-repudiation requires that retroactive modification, deletion, or reordering of security incidents is mathematically detectable.
 
 | Attack ID | Attack Name | Attacker Goal | Execution Steps | Target Defensive Control | Pass vs. Fail Criteria |
 | :---: | :--- | :--- | :--- | :--- | :--- |
 | **ATK-18** | Forensic Score Modification | Cover up an impersonation incident by editing confidence score from 0.20 to 0.95. | `UPDATE logs SET confidence_score = 0.95 WHERE id = 15;` | SHA-256 cryptographic hash chaining (`entry_hash = SHA256(data || prev_hash)`). | **PASS (Blocked):** `python log_viewer.py --verify-integrity` traverses chain, detects digest mismatch at ID 15, and halts.<br>**FAIL (Bypassed):** Audit tool reports clean chain. |
 | **ATK-19** | Audit Row Deletion | Erase an embarrassing `LOCK_FACE_MISMATCH` row completely from SQLite. | `DELETE FROM logs WHERE id = 15;` | Backward pointer continuity: row 16's `previous_hash` points to deleted row's digest. | **PASS (Blocked):** Verification flags missing link immediately at row 16.<br>**FAIL (Bypassed):** Ledger verifies cleanly. |
+| **ATK-19b** | Audit Row Reordering | Swap positions of two consecutive log entries to falsify event sequence. | Swap row records or IDs in SQLite table. | Backward pointer continuity (`previous_hash` points to strict predecessor). | **PASS (Blocked):** Traverse flags mismatch immediately at the swapped row.<br>**FAIL (Bypassed):** Ledger verifies cleanly despite swapped order. |
 | **ATK-20** | Full Local Chain Recomputation | Rewrite all hashes from the Genesis Hash forward to falsify the entire history. | Write a Python script to iterate through all rows, recalculate SHA-256 digests sequentially, and update database. | **Known Documented Limitation:** Local SQLite database has no hardware write-once memory. | **DOCUMENTED FINDING:** Script successfully recomputes local chain; highlights why external RFC 3161 append-only ledger anchoring is required in production. |
 
 ---
 
 ### Category 7: Fault Injection & Fail-Closed Validation
-*Security Rationale:* The primary vulnerability of poorly designed security daemons is **Failing Open** during unexpected operational crashes.
+*Security Rationale:* The primary vulnerability of poorly designed security daemons is **Failing Open** during unexpected operational crashes, network partitions, or storage exhaustion.
 
 | Attack ID | Attack Name | Attacker Goal | Execution Steps | Target Defensive Control | Pass vs. Fail Criteria |
 | :---: | :--- | :--- | :--- | :--- | :--- |
 | **ATK-21** | Server Process Termination | Kill central server while student session is active to bypass checks. | 1. Student logs in.<br>2. Open Task Manager and `End Process` on `uvicorn server.main:app`.<br>3. Wait for edge client 30s check. | Exception handling and fail-closed state machine in `verify.py`. | **PASS (Blocked):** API call fails; client catches network exception; grace period counter expires; Windows desktop forcibly locks.<br>**FAIL (Bypassed):** Edge client remains open indefinitely. |
 | **ATK-22** | Sensor Disconnect Injection | Unplug the USB webcam while workstation is in active use. | 1. Active session in progress.<br>2. Physically disconnect USB camera cable.<br>3. Observe system behavior. | OpenCV frame capture error handling (`ret == False`). | **PASS (Blocked):** Client detects frame failure, flags hardware sensor loss, logs alert, and engages OS lockdown.<br>**FAIL (Bypassed):** Daemon crashes silently with unhandled exception, leaving desktop unlocked. |
+| **ATK-22b** | Disk Space Exhaustion / Storage Failure | Fill client or server storage to 100% capacity to trigger silent bypass. | Fill disk partition with dummy file; initiate authentication. | Fail-closed exception guards in database writing and session management. | **PASS (Blocked):** System catches `sqlite3.OperationalError: disk is full` or OS I/O error, denies login, and preserves lock state.<br>**FAIL (Bypassed):** System unlocks or ignores failed audit writes. |
 
 ---
 
 ### Category 8: Client-Side Bypass & Local Administrator Abuse
-*Security Rationale:* Students in academic labs often possess local user permissions. The system must account for local process termination attempts.
+*Security Rationale:* Students in academic labs often possess local user permissions. The system must account for local process termination attempts and file tampering.
 
 | Attack ID | Attack Name | Attacker Goal | Execution Steps | Target Defensive Control | Pass vs. Fail Criteria |
 | :---: | :--- | :--- | :--- | :--- | :--- |
 | **ATK-23** | Daemon Process Termination | Kill `python verify.py` via Windows Task Manager to freeze monitoring. | 1. Log in to workstation.<br>2. Open Task Manager.<br>3. Locate `python.exe` background worker process and click `End Task`. | Operating System Kiosk Policy / Auto-Restart Service. | **ANALYSIS / PARTIAL:** User-mode process terminates; continuous checks cease. Demonstrates why production deployment requires running as a Windows Service under `NT AUTHORITY\SYSTEM` with non-admin student accounts. |
+| **ATK-23b** | Client Module / Model File Deletion | Delete `shape_predictor_68_face_landmarks.dat` or `verify.py` from disk. | 1. Navigate to repo folder.<br>2. Delete or rename landmark dat file.<br>3. Attempt login. | Startup sanity assertion and file presence validation in `liveness_check.py`. | **PASS (Blocked):** System halts immediately with clear diagnostic error; denies login; refuses to unlock.<br>**FAIL (Bypassed):** Falls back to unverified open state. |
 | **ATK-24** | Client Configuration Tampering | Edit `config.py` to loosen `face_match_tolerance` from 0.60 to 1.0. | 1. Open `config.py` in editor.<br>2. Change tolerance to 1.0.<br>3. Attempt login with completely different face. | Configuration Integrity / Code Signing. | **ANALYSIS / MITIGATED:** Client checks evaluate tolerance; however, central server enforces risk-band logging ($d > 0.60 \rightarrow \text{REJECT}$) and dispatches incident alerts. |
 
 ---
@@ -129,7 +135,7 @@ flowchart TD
 The findings table summarizes the results of the adversarial test execution:
 
 | Finding ID | Vulnerability / Attack Tested | Threat Domain | Result | Severity (CVSS) | Technical Evidence | Resolution / Accepted Risk |
-| :---: | :--- | :---: | :---: | :---: | :--- | :--- |
+| :---: | :--- | :--- :--- | :---: | :---: | :--- | :--- |
 | **VULN-01** | Missing / Tampered JWT Authentication | API Gateway | **BLOCKED** | **High** (CVSS: 7.5) | `ADV-01`, `ADV-02`, `ADV-03` returned HTTP 401/403. | Enforced by FastAPI `Depends(verify_jwt_token)` and PyJWT signature checks. |
 | **VULN-02** | SQL Injection Probing | Database | **BLOCKED** | **High** (CVSS: 8.1) | `ADV-05`, `ADV-06` returned 404; database tables remained fully intact. | Enforced by SQLite parameterized prepared statements (`?` parameters). |
 | **VULN-03** | Biometric Ciphertext Bit-Flipping | Data at Rest | **BLOCKED** | **High** (CVSS: 7.2) | `ADV-07` caught by HMAC-SHA256, raising `ValueError("TAMPER_DETECTED")`. | Enforced by Fernet authenticated encryption (AES-128-CBC + HMAC-SHA256). |
@@ -138,6 +144,9 @@ The findings table summarizes the results of the adversarial test execution:
 | **VULN-06** | **System Event Foreign Key Drop** | Audit Logging | **BYPASSED (Fixed)** | **Medium** (CVSS: 5.3) | Logging security event for `SYSTEM` failed with `FOREIGN KEY constraint failed`. | **FIXED:** Added default `SYSTEM` identity into `students` table during `init_db`. |
 | **VULN-07** | Local Hash Chain Full Recomputation | Audit Ledger | **BYPASSED (Known)** | **Medium** (CVSS: 4.8) | Compromised local admin script recomputes all SHA-256 hashes from $H_0$. | **Accepted Academic Limitation:** Production requires remote RFC 3161 ledger anchoring. |
 | **VULN-08** | Client Process Termination by Admin | Host Endpoint | **PARTIALLY BLOCKED** | **Low** (CVSS: 3.8) | Local admin can kill user-mode `python.exe` via Task Manager. | **Accepted Constraint:** Production requires deployment as an OS System Service with kiosk lockdown. |
+| **VULN-09** | Audit Row Reordering Attack | Audit Ledger | **BLOCKED** | **Medium** (CVSS: 6.2) | `ADV-10` detected broken backward hash linkage upon record order swap. | Enforced by strict cryptographic pointer chaining (`previous_hash`). |
+| **VULN-10** | Malformed & Oversized Payload Injection | API Gateway | **BLOCKED** | **Medium** (CVSS: 5.8) | `ADV-11` rejected invalid types with HTTP 422 Unprocessable Entity. | Enforced by Pydantic model validation. |
+| **VULN-11** | Revoked Device Token Replay | API Gateway | **BLOCKED** | **High** (CVSS: 7.4) | `ADV-12` rejected token with HTTP 403 Forbidden after device revocation. | Enforced by real-time device status lookup in `verify_jwt_token`. |
 
 ---
 
@@ -236,10 +245,10 @@ curl -i http://127.0.0.1:8000/student/TEST_ROLL
 - **Execution Command:**
   ```powershell
   # Inspect encrypted BLOBs at rest:
-  sqlite3 access_control.db "SELECT roll_number, hex(substr(face_encoding, 1, 16)) FROM students;"
+  sqlite3 server/central_access_control.db "SELECT roll_number, hex(substr(face_encoding, 1, 16)) FROM students;"
 
   # Verify Genesis Hash anchoring:
-  sqlite3 access_control.db "SELECT id, event, previous_hash, entry_hash FROM logs ORDER BY id ASC LIMIT 3;"
+  sqlite3 server/central_access_control.db "SELECT id, event, previous_hash, entry_hash FROM logs ORDER BY id ASC LIMIT 3;"
   ```
 
 ---

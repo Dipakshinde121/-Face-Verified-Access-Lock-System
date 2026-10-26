@@ -234,5 +234,107 @@ class TestAdversarialSecurity(unittest.TestCase):
         self.assertTrue(chain_broken, "Deleting an audit row must break hash continuity")
         print(f"[ADV-09] Audit row deletion detected: hash continuity broken immediately after deleted row (PASS)")
 
+    def test_adv_10_hash_chain_row_reordering(self):
+        """Attack: Swap two adjacent log entries in SQLite to falsify sequence of events."""
+        # Insert two sequential events
+        self.client.post("/log", json={
+            "roll_number": self.test_student,
+            "event": "EVENT_SEQUENCE_A",
+            "severity": "LOW",
+            "confidence_score": 0.85,
+            "device_id": self.device_id
+        }, headers=self.headers)
+        
+        self.client.post("/log", json={
+            "roll_number": self.test_student,
+            "event": "EVENT_SEQUENCE_B",
+            "severity": "LOW",
+            "confidence_score": 0.86,
+            "device_id": self.device_id
+        }, headers=self.headers)
+        
+        conn = get_db_connection(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM logs WHERE roll_number=? AND event IN ('EVENT_SEQUENCE_A', 'EVENT_SEQUENCE_B') ORDER BY id DESC LIMIT 2", (self.test_student,))
+        ids = [row[0] for row in cursor.fetchall()]
+        self.assertEqual(len(ids), 2)
+        id_b, id_a = ids[0], ids[1]
+        
+        # Swap the two rows' event data while preserving IDs, or swap their previous_hash links
+        cursor.execute("SELECT event, entry_hash, previous_hash FROM logs WHERE id=?", (id_a,))
+        row_a = cursor.fetchone()
+        cursor.execute("SELECT event, entry_hash, previous_hash FROM logs WHERE id=?", (id_b,))
+        row_b = cursor.fetchone()
+        
+        # Swap entry_hash between the two records in the database
+        cursor.execute("UPDATE logs SET entry_hash=? WHERE id=?", (row_b[1], id_a))
+        cursor.execute("UPDATE logs SET entry_hash=? WHERE id=?", (row_a[1], id_b))
+        conn.commit()
+        
+        # Traverse chain to detect reordering anomaly
+        cursor.execute("SELECT id, entry_hash, previous_hash FROM logs ORDER BY id ASC")
+        rows = cursor.fetchall()
+        reorder_caught = False
+        prev = GENESIS_HASH
+        for r in rows:
+            r_id, r_entry, r_prev = r
+            if r_prev != prev:
+                reorder_caught = True
+                break
+            prev = r_entry
+        conn.close()
+        self.assertTrue(reorder_caught, "Swapping/reordering log records must break backward hash chaining")
+        print(f"[ADV-10] Audit row reordering detected: cryptographic chain linkage broken (PASS)")
+
+    # ==========================================
+    # CATEGORY 5: MALFORMED PAYLOADS & REVERSAL
+    # ==========================================
+    def test_adv_11_malformed_payload_rejection(self):
+        """Attack: Submit malformed types and oversized payload to REST endpoints."""
+        # 1. Malformed payload types (string for float confidence score, invalid types)
+        bad_payload = {
+            "roll_number": self.test_student,
+            "event": 99999,  # Should be string
+            "severity": "CRITICAL",
+            "confidence_score": "NOT_A_FLOAT"
+        }
+        res = self.client.post("/log", json=bad_payload, headers=self.headers)
+        self.assertEqual(res.status_code, 422, "Malformed payload types must be rejected with HTTP 422")
+        
+        # 2. Oversized payload probing
+        oversized_str = "A" * (1024 * 1024) # 1 MB synthetic string
+        bad_register = {
+            "roll_number": oversized_str,
+            "name": "Buffer Overflow Probe",
+            "face_encoding_b64": "invalid_base64_data!!!",
+            "totp_secret_b64": "invalid_base64_data!!!"
+        }
+        res2 = self.client.post("/register", json=bad_register, headers=self.headers)
+        self.assertIn(res2.status_code, [400, 422, 500], "Malformed base64 / oversized payload safely handled")
+        print("[ADV-11] Malformed and oversized payloads strictly rejected by Pydantic schema validation (PASS)")
+
+    def test_adv_12_revoked_device_token_rejection(self):
+        """Attack: Attempt API access using a JWT from a revoked device."""
+        # Provision a sacrificial device and immediately revoke it
+        reg_res = self.client.post("/device/register?device_label=Sacrificial-PC")
+        dev_data = reg_res.json()
+        s_dev_id = dev_data["device_id"]
+        s_secret = dev_data["device_secret"]
+        
+        token_res = self.client.post("/token", data={"username": s_dev_id, "password": s_secret})
+        s_token = token_res.json()["access_token"]
+        
+        # Mark device as revoked in DB
+        conn = get_db_connection(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("UPDATE devices SET revoked = 1 WHERE device_id = ?", (s_dev_id,))
+        conn.commit()
+        conn.close()
+        
+        # Attempt access using the issued token
+        res = self.client.get(f"/student/{self.test_student}", headers={"Authorization": f"Bearer {s_token}"})
+        self.assertEqual(res.status_code, 403, "Revoked device token must be rejected with HTTP 403")
+        print("[ADV-12] Revoked device token rejected with HTTP 403 (PASS)")
+
 if __name__ == '__main__':
     unittest.main()

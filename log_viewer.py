@@ -10,7 +10,9 @@ DB_PATH = SERVER_DB_PATH if os.path.exists(SERVER_DB_PATH) else LOCAL_DB_PATH
 
 # Dictionary mapping raw technical events to Plain-English descriptions (Schema Doc §4)
 EVENT_DESCRIPTIONS = {
-    "LOGIN": "Successful 3-factor login",
+    "LOGIN": "Successful login",
+    "LOGIN_2FA": "Successful 2-Factor login (Roll + Live Biometrics)",
+    "LOGIN_3FA": "Successful 3-Factor login (Roll + TOTP + Live Biometrics)",
     "LOGOUT": "User ended session manually",
     "LOGOUT_OR_LOCK": "Session terminated (manual or auto-lock)",
     "REGISTRATION_SUCCESS": "New student registered biometrics",
@@ -86,7 +88,7 @@ def verify_log_integrity(conn):
                 print("[!] INTEGRITY CHECK: UNHASHED LEGACY LOG ENTRY DETECTED")
                 print("="*60)
                 print(f"Log ID: {log_id} | Timestamp: {timestamp} | Event: {event}")
-                print("Explanation: This entry was recorded before hash-chaining was enabled (Day 19).")
+                print("Explanation: This entry was recorded before hash-chaining was enabled.")
                 print("Per Schema Document Section 7: Rebuild the database from empty for a pristine chain.")
                 print("="*60)
                 return

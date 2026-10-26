@@ -128,13 +128,29 @@ python setup_key.py
 ```
 
 ### Step 5: Start the Central Server
+
+**Option A: Running Directly with Python**
 ```bash
 python -m uvicorn server.main:app --host 127.0.0.1 --port 8000 --ssl-keyfile server/key.pem --ssl-certfile server/cert.pem
 # Server Swagger API Docs available at: https://127.0.0.1:8000/docs
 ```
 
-### Step 6: Provision Lab Workstation (Edge Client)
+**Option B: Running with Docker (Recommended for Central Lab Server)**
 ```bash
+# Build and run containerized server in the background
+docker compose up -d --build
+# Or run the Windows batch script:
+run_docker.bat
+```
+
+### Step 6: Provision Lab Workstation (Edge Client on Other PCs)
+
+On any student or lab PC:
+```bash
+# 1-Click Automated Setup (creates .venv, installs dependencies, provisions device):
+setup_client.bat
+
+# Or manual provisioning:
 python setup_device.py
 # Provisions unique device_id and secret; caches active JWT token
 ```

@@ -1,0 +1,27 @@
+# ==============================================================================
+# Docker Ignore Rules - Lab Face-Verified Access Lock System
+# ==============================================================================
+
+.git
+.gitignore
+.venv
+venv
+env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.agents
+scratch
+*.docx
+*.pdf
+*.pptx
+*.dat
+*.dat.bz2
+*.whl
+*.mp4
+*.mov
+Thumbs.db
+Desktop.ini
+.vscode
+.idea

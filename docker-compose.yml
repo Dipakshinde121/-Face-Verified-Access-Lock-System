@@ -1,0 +1,28 @@
+# ==============================================================================
+# Docker Compose - Lab Face-Verified Access Lock System
+# Central Access Control Server Deployment
+# ==============================================================================
+services:
+  access-control-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lab_access_control_server
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - AUTH_MODE=2FA
+      - JWT_SECRET=DemoSecretKeyForLabEnvironmentChangeInProduction1234567890
+      - VERIFICATION_INTERVAL=30
+    volumes:
+      # Persist SQLite database and TLS credentials across container restarts
+      - ./server/central_access_control.db:/app/server/central_access_control.db
+      - ./server/key.pem:/app/server/key.pem
+      - ./server/cert.pem:/app/server/cert.pem
+      - ./config.json:/app/config.json
+    healthcheck:
+      test: ["CMD-SHELL", "curl -k -f https://127.0.0.1:8000/docs || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

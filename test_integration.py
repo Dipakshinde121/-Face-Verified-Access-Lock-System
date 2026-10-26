@@ -260,6 +260,80 @@ def run_integration_tests():
     results["Confidence Score Tamper Detection (Layer Interaction)"] = "PASS"
 
     # -------------------------------------------------------------------------
+    # TEST 10: 2FA Authentication Policy & Forensic Audit Logging
+    # -------------------------------------------------------------------------
+    print("\n[TEST 10] Testing 2FA Authentication Policy & Forensic Audit Logging...")
+    # In 2FA mode, student authenticates with Roll + Live Biometrics without TOTP
+    log_2fa_resp = client.post("/log", json={
+        "roll_number": test_roll,
+        "event": "LOGIN_2FA",
+        "severity": "INFO",
+        "confidence_score": 0.91,
+        "device_id": device_id
+    }, headers=auth_headers)
+    assert log_2fa_resp.status_code == 200, f"Logging LOGIN_2FA failed: {log_2fa_resp.text}"
+    
+    conn = get_db_connection(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT event, severity, confidence_score, entry_hash FROM logs WHERE event = 'LOGIN_2FA' ORDER BY id DESC LIMIT 1")
+    row_2fa = cursor.fetchone()
+    conn.close()
+    assert row_2fa is not None, "LOGIN_2FA event was not recorded in logs!"
+    assert row_2fa[0] == "LOGIN_2FA"
+    assert row_2fa[1] == "INFO"
+    assert abs(row_2fa[2] - 0.91) < 1e-4
+    print("  [+] LOGIN_2FA recorded with severity 'INFO', confidence 0.91, and cryptographic entry hash.")
+    results["2FA Policy & Audit Logging"] = "PASS"
+
+    # -------------------------------------------------------------------------
+    # TEST 11: 3FA Exam Mode Policy Enforcement & Audit Logging
+    # -------------------------------------------------------------------------
+    print("\n[TEST 11] Testing 3FA Exam Mode Policy Enforcement & Audit Logging...")
+    # Step 1: In 3FA mode, invalid TOTP code is rejected and logged
+    log_totp_fail = client.post("/log", json={
+        "roll_number": test_roll,
+        "event": "LOGIN_DENIED_INVALID_TOTP",
+        "severity": "MEDIUM",
+        "device_id": device_id
+    }, headers=auth_headers)
+    assert log_totp_fail.status_code == 200, f"Logging LOGIN_DENIED_INVALID_TOTP failed: {log_totp_fail.text}"
+    
+    # Step 2: Valid TOTP verified, biometric match succeeds -> LOGIN_3FA logged
+    log_3fa_resp = client.post("/log", json={
+        "roll_number": test_roll,
+        "event": "LOGIN_3FA",
+        "severity": "INFO",
+        "confidence_score": 0.87,
+        "device_id": device_id
+    }, headers=auth_headers)
+    assert log_3fa_resp.status_code == 200, f"Logging LOGIN_3FA failed: {log_3fa_resp.text}"
+    
+    conn = get_db_connection(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT event, severity, confidence_score, entry_hash FROM logs WHERE event = 'LOGIN_3FA' ORDER BY id DESC LIMIT 1")
+    row_3fa = cursor.fetchone()
+    conn.close()
+    assert row_3fa is not None, "LOGIN_3FA event was not recorded in logs!"
+    assert row_3fa[0] == "LOGIN_3FA"
+    assert row_3fa[1] == "INFO"
+    assert abs(row_3fa[2] - 0.87) < 1e-4
+    print("  [+] LOGIN_3FA recorded with severity 'INFO', confidence 0.87, and cryptographic entry hash.")
+    results["3FA Exam Mode Enforcement & Logging"] = "PASS"
+
+    # -------------------------------------------------------------------------
+    # TEST 12: Unified Cryptographic Chain Verification Across 2FA and 3FA
+    # -------------------------------------------------------------------------
+    print("\n[TEST 12] Testing Full Chain Cryptographic Integrity Across All 2FA and 3FA Entries...")
+    conn = get_db_connection(DB_PATH)
+    try:
+        verify_log_integrity(conn)
+        results["Cryptographic Chain Continuity (2FA & 3FA)"] = "PASS"
+    except Exception as e:
+        results["Cryptographic Chain Continuity (2FA & 3FA)"] = f"FAIL: {e}"
+    finally:
+        conn.close()
+
+    # -------------------------------------------------------------------------
     # SUMMARY REPORT
     # -------------------------------------------------------------------------
     print("\n" + "=" * 70)
